@@ -6,7 +6,7 @@ The library itself is publicly available and accessible from the Australian Anta
 
 Rather than being an archive of exemplary recordings, like the [Watkins Marine Mammal Sound Database](https://cis.whoi.edu/science/B/whalesounds/index.cfm), this Annotated Library is intended to contain a sample of sounds that is representative of real-world long-term underwater recordings. Such representative recordings are more appropriate for training and testing detection algorithms than curated 'best of' recordings. 
 
-The code included in this repository is a grab-bag of different functions that were developed during creation of the IWC-SORP Anntotated Library, as well as functions used to analyse these data for the resulting publications. The code in this repository depends on the Matlab package soundFolder to streamline accessing of wav files. Some of the functionality provided by this code includes:
+The code included in this repository is a grab-bag of different functions that were developed during creation of the IWC-SORP Anntotated Library, as well as functions used to analyse these data for the resulting publications. Some of the functionality provided by this code includes:
   * Functions for sub-sampling long-term datasets
   * Functions for reading Raven Selection Tables
   * Functions for reading Koogu Detections (which are essentially a sub-type of Raven Selection Table)
@@ -14,9 +14,11 @@ The code included in this repository is a grab-bag of different functions that w
   * Functions for estimating the signal-to-noise ratio of annotations and detections
 
 ## Installation
-1) Download the repository to a location on your computer
-2) Add the location to the Matlab path
-
+1) Download and install dependencies. The code in this repository depends on: 
+  * (soundFolder)[https://github.com/BrianSMiller/soundFolder] to streamline accessing of wav files.
+  * (mkqlite)[https://mksqlite.sourceforge.net/] for accessing PAMGuard sqlite databases
+2) Download the repository to a location on your computer
+3) Add the location of the downloaded files to the Matlab path
 
 ## References
 Miller, B.S., Stafford, K.M., Van Opzeeland, I., Harris, D., Samaran, F., Širović, A., Buchan, S., Findlay, K., Balcazar, N., Nieukirk, S., Leroy, E.C., Aulich, M., Shabangu, F.W., Dziak, R.P., Lee, W., Hong, J., 2020. An annotated library of underwater acoustic recordings for testing and training automated algorithms for detecting Antarctic blue and fin whale sounds. Version 1. Australian Antarctic Data Centre. DOI: 10.26179/5e6056035c01b. http://data.aad.gov.au/metadata/records/AcousticTrends_BlueFinLibrary
