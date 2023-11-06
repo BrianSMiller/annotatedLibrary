@@ -15,12 +15,17 @@ The code included in this repository is a grab-bag of different functions that w
 
 ## Installation
 1) Download and install dependencies. The code in this repository depends on: 
-  * (soundFolder)[https://github.com/BrianSMiller/soundFolder] to streamline accessing of wav files.
-  * (mkqlite)[https://mksqlite.sourceforge.net/] for accessing PAMGuard sqlite databases
+  * [soundFolder](https://github.com/BrianSMiller/soundFolder) to streamline accessing of wav files.
+  * [mksqlite](https://mksqlite.sourceforge.net/) for accessing PAMGuard sqlite databases
 2) Download the repository to a location on your computer
 3) Add the location of the downloaded files to the Matlab path
 
-## References
-Miller, B.S., Stafford, K.M., Van Opzeeland, I., Harris, D., Samaran, F., Širović, A., Buchan, S., Findlay, K., Balcazar, N., Nieukirk, S., Leroy, E.C., Aulich, M., Shabangu, F.W., Dziak, R.P., Lee, W., Hong, J., 2020. An annotated library of underwater acoustic recordings for testing and training automated algorithms for detecting Antarctic blue and fin whale sounds. Version 1. Australian Antarctic Data Centre. DOI: 10.26179/5e6056035c01b. http://data.aad.gov.au/metadata/records/AcousticTrends_BlueFinLibrary
+## Documentation and example usage
+Documentation is a work-in-progress, but exists in the header of most functions. 
 
-Miller, B. S., IWC SORP Acoustic Trends Working Group, Kathleen M. Stafford, Ilse Van Opzeeland, Danielle Harris, Flore Samaran, Ana Širović, Susannah Buchan, Ken Findlay, Balcazar, N., Nieukirk, S., Leroy, E. C., et al. (2021). An open access dataset for developing automated detectors of Antarctic baleen whale sounds and performance evaluation of two commonly used detectors. Scientific Reports 11, 806. DOI: 10.1038/s41598-020-78995-8.
+Typical usage of the system can be found within this repository in the script example.m (and associated [example.pdf]). This example script calculates SNR of Z-calls for the IWC-SORP Annotated Library dataset Kerguelen2014 (NB: dataset not included here and must be downloaded separately). 
+
+## References
+Miller, B.S., Stafford, K.M., Van Opzeeland, I., Harris, D., Samaran, F., Širović, A., Buchan, S., Findlay, K., Balcazar, N., Nieukirk, S., Leroy, E.C., Aulich, M., Shabangu, F.W., Dziak, R.P., Lee, W., Hong, J., 2020. [An annotated library of underwater acoustic recordings for testing and training automated algorithms for detecting Antarctic blue and fin whale sounds](http://data.aad.gov.au/metadata/records/AcousticTrends_BlueFinLibrary). Version 1. Australian Antarctic Data Centre. DOI: 10.26179/5e6056035c01b. http://data.aad.gov.au/metadata/records/AcousticTrends_BlueFinLibrary
+
+Miller, B. S., IWC SORP Acoustic Trends Working Group, Kathleen M. Stafford, Ilse Van Opzeeland, Danielle Harris, Flore Samaran, Ana Širović, Susannah Buchan, Ken Findlay, Balcazar, N., Nieukirk, S., Leroy, E. C., et al. (2021). [An open access dataset for developing automated detectors of Antarctic baleen whale sounds and performance evaluation of two commonly used detectors](http://www.nature.com/articles/s41598-020-78995-8). Scientific Reports 11, 806. DOI: 10.1038/s41598-020-78995-8.

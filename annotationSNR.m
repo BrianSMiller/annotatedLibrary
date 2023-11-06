@@ -175,10 +175,10 @@ end
 switch params.snrType
     case 'spectrogram'
         %% Measure signal power and variance using spectrogram *cells*
-        [rmsSignal, ~, ~, ~] = spectrogramPowerAndVariance(...
+        [rmsSignal, ~, ~] = spectrogramPowerAndVariance(...
             annot.audio, nfft, nOverlap, nfft, sampleRate, freq,...
             params.metadata);
-        [rmsNoise, noiseVar, ~, ~] = spectrogramPowerAndVariance(...
+        [rmsNoise, noiseVar, ~] = spectrogramPowerAndVariance(...
             noise.audio, nfft, nOverlap, nfft, sampleRate, freq,...
             params.metadata);
         annot.rmsLevel = 10*log10(rmsSignal);
@@ -349,7 +349,7 @@ end
 %%%% Internal supporting functions below here
 
 %% Measure power and variance from spectrogram cells
-function [power, variance, slicePower, sT] =spectrogramPowerAndVariance(...
+function [power, variance, sT] =spectrogramPowerAndVariance(...
     x, window, nOverlap, nfft, sampleRate, freqRange, metadata)
 % Measure signal power and variance using short-time fourier tranform
 % (spectrogram)
@@ -371,8 +371,8 @@ end
 
 specPsd = specPsd(sF >= freqRange(1) & sF <= freqRange(2),:);
 
-power = mean(specPsd);
-variance = var(specPsd);
+power = mean(specPsd(:));
+variance = var(specPsd(:));
 
 
 % Measure signal power and variance using from slices, rather than cells of
