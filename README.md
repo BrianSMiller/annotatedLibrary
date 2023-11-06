@@ -23,7 +23,7 @@ The code included in this repository is a grab-bag of different functions that w
 ## Documentation and example usage
 Documentation is a work-in-progress, but exists in the header of most functions. 
 
-Typical usage of the system can be found within this repository in the script example.m (and associated [example.pdf]). This example script calculates SNR of Z-calls for the IWC-SORP Annotated Library dataset Kerguelen2014 (NB: dataset not included here and must be downloaded separately). 
+Typical usage of the system can be found within this repository in the script example.m (and associated [example.pdf](https://github.com/BrianSMiller/annotatedLibrary/blob/main/doc/example.pdf)). This example script calculates SNR of Z-calls for the IWC-SORP Annotated Library dataset Kerguelen2014 (NB: dataset not included here and must be downloaded separately). 
 
 ## References
 Miller, B.S., Stafford, K.M., Van Opzeeland, I., Harris, D., Samaran, F., Širović, A., Buchan, S., Findlay, K., Balcazar, N., Nieukirk, S., Leroy, E.C., Aulich, M., Shabangu, F.W., Dziak, R.P., Lee, W., Hong, J., 2020. [An annotated library of underwater acoustic recordings for testing and training automated algorithms for detecting Antarctic blue and fin whale sounds](http://data.aad.gov.au/metadata/records/AcousticTrends_BlueFinLibrary). Version 1. Australian Antarctic Data Centre. DOI: 10.26179/5e6056035c01b. http://data.aad.gov.au/metadata/records/AcousticTrends_BlueFinLibrary
