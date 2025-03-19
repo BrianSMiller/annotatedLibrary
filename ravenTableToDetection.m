@@ -46,13 +46,17 @@ end
 
 try
 ravenTable.t0 = datenum(ravenTable.BeginDateTime,...
-                       'yyyy/mm/dd HH:MM:SS.fff');                  % Matlab datenum
+                       'yyyy/mm/dd HH:MM:SS.fff');   % Matlab datenum
 catch
+    sampleRate = mean(ravenTable.BegFileSamp_samples_./ravenTable.FileOffset_s_);
     for i = 1:height(ravenTable)
         ravenTable.t0(i) = filenameToTimeStamp(ravenTable.BeginFile{i},...
             '_yyyy-mm-dd_HH-MM-SS.') +...
-            ravenTable.BegFileSamp_samples_(i)/12000 /86400;
+            ravenTable.BegFileSamp_samples_(i)/sampleRate /86400;
     end
+end
+if ~any(strcmpi(ravenTable.Properties.VariableNames,'DeltaTime_s_'))
+    ravenTable.DeltaTime_s_ = ravenTable.EndTime_s_-ravenTable.BeginTime_s_;
 end
 ravenTable.tEnd = ravenTable.t0+ravenTable.DeltaTime_s_/86400;        % Matlab datenum
 ravenTable.duration = (ravenTable.tEnd-ravenTable.t0)*86400;          % Duration in seconds

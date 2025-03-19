@@ -40,20 +40,33 @@ else
 end
 
 try
+    t0 = zeros(height(t),1);
     % Assume wavFolderInfo has been called correctly and cache exists
     wavInfo = wavFolderInfo(soundFolder);
-    for i = 1:height(t)
+    parfor i = 1:height(t)
         ix = contains({wavInfo.fname},t.BeginFile(i));
-        t.t0(i) = wavInfo(ix).startDate+t.FileOffset_s_(i)/86400;
-     end
+        t0(i) = wavInfo(ix).startDate+t.FileOffset_s_(i)/86400;
+    end
+    t.t0 = t0;
 catch
     keyboard
 end
 t.DeltaTime_s_ = t.EndTime_s_ - t.BeginTime_s_;
 t.tEnd = t.t0+t.DeltaTime_s_/86400;        % Matlab datenum
 t.duration = (t.tEnd-t.t0)*86400;          % Duration in seconds
-t.fLow = t.LowFrequency_Hz_;
-t.fHigh= t.HighFrequency_Hz_;
+
+% Older versions of Koogu
+if any(strcmpi(t.Properties.VariableNames,'LowFrequency_Hz_'))
+    t.fLow = t.LowFrequency_Hz_;
+else % Newer versions of Koogu
+    t.fLow = t.LowFreq_Hz_;
+end
+
+if any(strcmpi(t.Properties.VariableNames,'HighFrequency_Hz_'))
+    t.fHigh= t.HighFrequency_Hz_;
+else
+    t.fHigh= t.HighFreq_Hz_;
+end
 t.freq = [t.fLow t.fHigh];  % Frequency vector in Hz
 t.soundFolder =  cellstr(repmat(soundFolder,nDetect,1));             % Location of audio files for this detection
 t.siteCode = cellstr(repmat(siteCode,nDetect,1));                    % Append site to data structure

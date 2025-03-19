@@ -33,9 +33,14 @@ function [snr, rmsSignal, rmsNoise, noiseVar, fileInfo] = annotationSNR(annot,pa
 %     spectroParams.post = 4;% post-detection sound buffer (seconds)
 %     spectroParams.win = sampleRate; % FFT & window length (samples)
 %     spectroParams.overlap = floor(sampleRate*0.85); % Time slice overlap
-%     (samples)
+%      (samples)
 %     spectroParams.yLims = [0 125]; % Spectrogram frequency limits (Hz)
-%
+%   PARAMS.snrType is a string to choose the algorithm for measuring SNR
+%     [spectrogramSlices] % Power in band averaged per spectrogram slice 
+%     'spectrogram' % Power in band averaged per spectrogram cell
+%     'quantiles'   % Power measured for 85th percentile  
+%     'timeDomain'; % RMS power in band measured in time domain (via 
+%        bandpass filter)
 %% Brian Miller, Australian Antarctic Division 2017.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -76,9 +81,11 @@ if ~isfield(params,'noiseDuration')
 end
 
 if ~isfield(params,'snrType')
-    params.snrType = 'spectrogram';
+    params.snrType = 'spectrogramSlices'; % Used by Annotated Library
+    % params.snrType = 'spectrogram';
     % params.snrType = 'quantiles';
     % params.snrType = 'timeDomain';
+    
 end
 
 if ~isfield(params,'metadata')
