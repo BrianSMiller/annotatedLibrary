@@ -42,13 +42,25 @@ end
 try
     t0 = zeros(height(t),1);
     % Assume wavFolderInfo has been called correctly and cache exists
-    wavInfo = wavFolderInfo(soundFolder);
-    parfor i = 1:height(t)
-        ix = contains({wavInfo.fname},t.BeginFile(i));
-        t0(i) = wavInfo(ix).startDate+t.FileOffset_s_(i)/86400;
+    if ismember(siteCode,{'Kerguelen2005','Kerguelen2006', ...
+            'Casey2004', ...
+            'Prydz2005','Prydz2006'})
+        wavInfo = xwavFolderInfo(soundFolder);
+    else
+        wavInfo = wavFolderInfo(soundFolder);
+    end
+    fnames = {wavInfo.fname};
+    startDates = [wavInfo.startDate];
+    offsets = [t.FileOffset_s_];
+    beginFile = t.BeginFile;
+    for i = 1:height(t)
+        ix = contains(fnames,beginFile(i));
+        t0(i) = startDates(ix)+offsets(i)/86400;
     end
     t.t0 = t0;
-catch
+catch 
+    % TODO: add some graceful error handling above for situation where 
+    % t contains detections outside of soundFolder
     keyboard
 end
 t.DeltaTime_s_ = t.EndTime_s_ - t.BeginTime_s_;

@@ -10,12 +10,12 @@ wavInfo = wavFolderInfo(wavFolder)
 
 %% View spectrogram clips of detections
 if nargin < 3
-    sp = spectroParams('blue');
+    sp = spectroParams('fin');
 end
 sampleRateOrig = wavInfo(1).sampleRate;
 
 button = 1;
-k = 14000;
+k = 7048;
 
 while button ~=27 
 % for k = 1:nrow*ncol:height(c) % outer loop for pages
@@ -35,7 +35,7 @@ while button ~=27
         startTime = c.t0(ix);
         endTime = c.tEnd(ix);
         midpoint = mean([startTime endTime]);
-        c.FileOffset_s_(ix)  = c.FileOffset_s_(ix) - sp.pre;
+        c.FileOffset_s_(ix)  = max([0 c.FileOffset_s_(ix) - sp.pre]);
         c.DeltaTime_s_(ix) =  c.DeltaTime_s_(ix) + sp.post;
 
 %         wav =  downsampleSingleChannelFromFiles(wavInfo,startTime,endTime,1,sampleRate);
@@ -91,7 +91,7 @@ while button ~=27
 end
 
 function wav = downsampleFromWav(c,inputRate,outputRate)
-startSample = c.FileOffset_s_*inputRate;
+startSample = c.FileOffset_s_*inputRate+1;
 endSample = startSample + (c.DeltaTime_s_*inputRate);
 wav = audioread(fullfile(c.soundFolder{1},c.BeginFile{1}),floor([startSample, endSample]));
 q =  inputRate/outputRate;

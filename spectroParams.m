@@ -4,7 +4,7 @@ varTypes = {'int32' ,'int32', 'double','double','double','int32','int32','double
 sp = table('Size',[1 9],'VariableTypes',varTypes,'VariableNames',varNames);
 
 switch(lower(type))
-    case {'blue','abw','pbw','bmd','bm-d'}
+    case {'d','bmd','bm-d','downsweep','bp-downsweep','fin40','bp-40'}
         sp.nrow = 4; % Number of rows per page
         sp.ncol = 4; % Number of columns per page
 
@@ -15,6 +15,19 @@ switch(lower(type))
         sp.nfft = 128;
         sp.noverlap = 112;
         sp.lowFreq = 30;
+        sp.highFreq = 125;
+
+        case {'blue','abw','pbw','fin','fin20','bp-20','bm_ant-abz'}
+        sp.nrow = 4; % Number of rows per page
+        sp.ncol = 4; % Number of columns per page
+
+        sp.pre = 5;
+        sp.post = 5;
+
+        sp.sampleRate = 250;
+        sp.nfft = 128;
+        sp.noverlap = 112;
+        sp.lowFreq = 5;
         sp.highFreq = 125;
 
     case {'srw','srwUp','upcall','srw_up','narw','narw-up','narwup'}

@@ -81,8 +81,8 @@ if ~isfield(params,'noiseDuration')
 end
 
 if ~isfield(params,'snrType')
-    params.snrType = 'spectrogramSlices'; % Used by Annotated Library
-    % params.snrType = 'spectrogram';
+    % params.snrType = 'spectrogramSlices'; % Used by Annotated Library
+    params.snrType = 'spectrogram';
     % params.snrType = 'quantiles';
     % params.snrType = 'timeDomain';
     
@@ -132,18 +132,18 @@ soundFolder = wavFolderInfo(annot.soundFolder);
 [annot.audio, ~, annot.fileInfo] = getAudioFromFiles(soundFolder,annot.t0,annot.tEnd);
 
 fileInfo = annot.fileInfo;
-if isempty(annot.fileInfo) || isempty(annot.audio)
-    snr = nan;
-    rmsSignal = nan;
-    rmsNoise = nan;
-    noiseVar = nan;
-    return;
+if isempty(annot.fileInfo) || isempty(annot.audio) 
+    snr = nan; rmsSignal = nan; rmsNoise = nan; noiseVar = nan; return;
 end
 
 % Assume all files are at the same sample rate
 sampleRate = annot.fileInfo(1).sampleRate;
 nfft = 2^(nextpow2(floor(annot.duration/nSlices / overlap * sampleRate)));
 nOverlap = floor(nfft*overlap); % overlap in samples
+
+if annot.duration*sampleRate < nfft
+    snr = nan; rmsSignal = nan;  rmsNoise = nan; noiseVar = nan;  return;
+end
 
 
 % Create a noise data structure just a bit earlier than the annotation
@@ -319,10 +319,11 @@ if showClips
         spectroParams.noiseDelay = params.noiseDelay/86400;
         %         pixelsPerSecond = 1;
         %         spectroParams.horizontalPixels = 2*spectroParams.horizontalPixels*c.duration
+        horizScale = 1920/860;
+        sliceDuration = spectroParams.win/sampleRate*(1-spectroParams.overlapPercent);
+        spectroParams.horizontalPixels = horizScale * (3*annot.duration+1+spectroParams.pre+spectroParams.post)/sliceDuration;
+
     end
-    horizScale = 1920/860;
-    sliceDuration = spectroParams.win/sampleRate*(1-spectroParams.overlapPercent);
-    spectroParams.horizontalPixels = horizScale * (3*annot.duration+1+spectroParams.pre+spectroParams.post)/sliceDuration;
 
     spectroAnnotationAndNoise(annot, noise, soundFolder, spectroParams, snr,...
         params.metadata)
@@ -366,7 +367,12 @@ if length(x) < window
     nfft = window;
 end
 x = x-mean(x);
-[~, sF, sT, specPsd] = spectrogram(x,window,nOverlap,nfft,sampleRate);
+try
+    [~, sF, sT, specPsd] = spectrogram(x,window,nOverlap,nfft,sampleRate);
+catch
+    power=nan; variance=nan; sT=nan;
+    return
+end
 
 % Apply calibration if recording metadata has been supplied
 if ~isempty(metadata) 
