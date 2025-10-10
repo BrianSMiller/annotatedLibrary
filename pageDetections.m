@@ -15,7 +15,7 @@ end
 sampleRateOrig = wavInfo(1).sampleRate;
 
 button = 1;
-k = 7048;
+k = 1;
 
 while button ~=27 
 % for k = 1:nrow*ncol:height(c) % outer loop for pages
@@ -42,7 +42,7 @@ while button ~=27
         wav = downsampleFromWav(c(ix,:),sampleRateOrig,sp.sampleRate);
         [s,f,t,p] = spectrogram(wav,sp.nfft,sp.noverlap,sp.nfft,sp.sampleRate,'yAxis');
         
-        pdB = 20*log10(p);
+        pdB = 10*log10(p);
         fIx = double(f > sp.lowFreq & f < sp.highFreq);
         nanIx = find(fIx==0);
         fIx(nanIx)=nan(size(nanIx));
@@ -91,8 +91,11 @@ while button ~=27
 end
 
 function wav = downsampleFromWav(c,inputRate,outputRate)
+ai = audioinfo(fullfile(c.soundFolder{1},c.BeginFile{1}));
+
 startSample = c.FileOffset_s_*inputRate+1;
-endSample = startSample + (c.DeltaTime_s_*inputRate);
+endSample = min(startSample + (c.DeltaTime_s_*inputRate), ai.TotalSamples);
+
 wav = audioread(fullfile(c.soundFolder{1},c.BeginFile{1}),floor([startSample, endSample]));
 q =  inputRate/outputRate;
 wav = resample(wav,1,q);

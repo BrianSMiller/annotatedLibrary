@@ -1,73 +1,162 @@
-function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post,startIndex)
+function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post,startIndex, increment)
 % c = judgeAllDetections(c,sampleRate,nfft,noverlap,pre,post)
 % Manually review and judge detections from captureHistoryTable, c.
 % Audio will be resampled to sampleRate, and spectrograms will be created
 % using nfft point FFTs, with noverlap points of overlap between slices.
 % Pre and post are the number of seconds of audio to load before and after
 % c.t0 and c.tEnd.
-cmPerPixel = 0.10;
+
+%% Create verdict and judged columns unless they already exist
+if ~isfield(c,'verdict')
+    c.verdict = nan(size(c.detect_observer1));
+end
+if ~isfield(c,'judged')
+    c.judged = false(size(c.verdict));
+end
+
+% Program flow options
+showJudged = false;     % Set to false to bypass already judged detections
+overwriteJudged = true; % subordinate to showJudged; Set false to view-only 
+                        % set true to redo-adjudication 
+
+% Visualisation options
+cmPerPixel = 0.05;      % Horizontal pixel scaling (cm per pixel).
+showObsBoxes = true;    % Show observer detection boundaries
+windowDur = 60;         % Duration (s) of audio clip (if using fixed duration)
+pos = [100,400,679,400];% Starting position of figure window (pixels)
+freqBand = [17 30];     % Lower and upper limits of frequency band used for color scale
+cAdjust = [5 99];       % Color scale floor and ceiling percentiles
+windowType = 'fixed';
+
 nDet = height(c);
-wavInfo = wavFolderInfo(c.soundFolder_table1{1});
+wavInfo = wavFolderInfo(c.soundFolder_observer1{1});
 
-
-figure('position',[680    500   679   400]);
+figure('position',pos);
+colormap(flipud(gray));
 set(gcf,'units','centimeters');
-pos = get(gcf,'pos');
 
-for i = startIndex:nDet
+i = startIndex;
+while (i <= nDet)
+    pos = get(gcf,'pos');
+    msg = '';
     try
-        if c.verdict(i); continue; end
-        % calculate audio times
-        startTime = min(c.t0_table1(i), c.t0_table2(i)) - pre/86400;
-        endTime = max(c.tEnd_table1(i),  c.tEnd_table2(i)) + post/86400;
+        if c.judged(i)==true & ~isnan(c.verdict(i))
+            if showJudged
+                msg = sprintf('Already judged as %g', c.verdict(i));
+            else
+                i = i+increment; % Uncomment to skip already judged
+                continue
+            end
+        end % keep existing verdicts
 
+        nObservers = sum(cellfun(@isempty,...
+            strfind(c.Properties.VariableNames,'detect_observer') ...
+            )==0);
+
+
+        % calculate audio times
+        callStart = min(c{i,append("t0_observer",string(1:nObservers))});
+        callEnd = max(c{i,append("tEnd_observer",string(1:nObservers))});
+
+        switch(windowType)
+            case 'prePost'
+                % Fixed pre and post
+                startTime = callStart - pre/86400;
+                endTime = callEnd + post/86400;
+            case 'fixed'
+                startTime = mean([callStart callEnd])-0.5*windowDur/86400;
+                endTime = mean([callStart callEnd])+0.5*windowDur/86400;
+            otherwise
+                startTime = callStart;
+                endTime = callEnd;
+        end
         wav =  downsampleSingleChannelFromFiles(wavInfo,startTime,endTime,1,sampleRate);
         [s,f,t,p] = spectrogram(wav,nfft,noverlap,[],sampleRate,'yAxis');
 
         pdB = 20*log10(p);
-        fIx = double(f > 30 & f < 125);
+        fIx = double(f > freqBand(1) & f < freqBand(2));
         nanIx = find(fIx==0);
         fIx(nanIx)=nan(size(nanIx));
         pIx = repmat(fIx,1,length(t));
-        h = pcolor(t,f,pdB.*pIx);
+        %         h = pcolor(t,f,pdB.*pIx);
+        h = pcolor(t,f,pdB);
+
         set(h,'lineStyle','none');
         %         view([0,90]);
-        clim = caxis;
-        caxis([-50 0]+clim(2));
+        %         clim(1) = min(pdB(:).*pIx(:));
+        clim(1) = prctile(pdB(:).*pIx(:),cAdjust(1));
+        %         clim(2) = max(pdB(:).*pIx(:));
+        clim(2) = prctile(pdB(:).*pIx(:),cAdjust(2));
+
+        set(gca,'clim',clim);
+
         %         caxis([100,200]-200);
         %         ylim([0,0.5]);
-        ti = sprintf('Row % 4g/% 4g: %s', i, nDet, datestr(c.t0(i)));
+        horzline([29,24],'c--');
+        vertline([(callStart-startTime)*86400 (callEnd-startTime)*86400],'c--')
+
+
+        if showObsBoxes
+            l = c{i,append("t0_observer",string(1:nObservers))}-startTime;
+            r = c{i,append("tEnd_observer",string(1:nObservers))}-startTime;
+            top = c{i,append("freq_2_observer",string(1:nObservers))};
+            bot = c{i,append("freq_1_observer",string(1:nObservers))};
+
+            ho = ishold;
+            hold on;
+            obsColors = lines(nObservers);
+            for j = 1:nObservers
+                plotBox([l(j),r(j)]*86400,[bot(j),top(j)],obsColors(j,:),'linewidth',1.5);
+                text(l(j)*86400,top(j),num2str(j),'color',obsColors(j,:))
+            end
+            if ho==0; hold off; end
+        end
+
+        ti = sprintf('#% 4g/%g floor/ceil percentile=[%g %g]\t(Row % 4g: %s)',...
+            1+(i-1)/increment,floor(nDet/increment), cAdjust, ...
+            i, datestr(c.t0(i)));
+
         title(ti);
+        text(mean(xlim),max(ylim),msg,'VerticalAlignment','top',...
+            'FontSize',14,'FontWeight','bold');
+
         pos(3) = size(s,2)*cmPerPixel;
         set(gcf,'position',pos);
         drawnow;
+
         [~,~,button] = ginput(1);
         switch button
+            case 28 % Left arrow shift color floor down (darker)
+                cAdjust = cAdjust+[-1 0];
+            case 29
+                cAdjust = cAdjust+[1 0]; % Down arrow color floor down (ligher)
+            case 30 % Up arrow shift color ceiling up (lighter)
+                cAdjust = cAdjust+[0 1];
+            case 31
+                cAdjust = cAdjust+[0 -1]; % Down arrow to shift cieling down (darker)
             case 1 % Left click for true positive;
-                c.verdict(i) = 1;
-            otherwise
-                c.verdict(i) = 0;
+                % Only write if new verdicts (unless overwrite is true)
+                if c.judged(i)~=true || overwriteJudged
+                    c.verdict(i) = 1;
+                    c.judged(i)=true;
+                end
+                i = i + increment;
+            case 3 % Right click for false positive
+                % Only write new verdicts or if overwriteJudged==true)
+                if c.judged(i)~=true || overwriteJudged
+                    c.verdict(i) = 0;
+                    c.judged(i)=true;
+                end
+                i = i + increment;
         end
+        % Ensure percentile stay within 0 and 100;
+        cAdjust(1) = max(cAdjust(1),0);
+        cAdjust(2) = min(cAdjust(2),100);
+
         disp(ti);
     catch
+        lasterror
         fprintf('Exiting on index %g\n',i);
         return
     end
-end
-end
-
-%%
-function c = addSnr(c,params)
-% Simple wrapper to around annotationSNR that adds required columns to a
-% captureHistoryTable
-if nargin < 2
-    params.freq = [30 115];
-    params.noiseDelay = 0;
-end
-c.duration = max(c.duration_table1,c.duration_table2);
-c.tEnd = c.t0 + c.duration/86400;
-c.freq = repmat([20,115],height(c),1);
-c.soundFolder = repmat(c.soundFolder_table1(1),height(c),1);
-[c.snrLurton, c.rmsSignal, c.rmsNoise, c.noiseVar] = annotationSNR(c,params);
-c.snrSimple = 20*log10(c.rmsSignal/c.rmsNoise);
 end

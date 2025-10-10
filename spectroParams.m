@@ -42,4 +42,16 @@ switch(lower(type))
         sp.noverlap = 224;
         sp.lowFreq = 30;
         sp.highFreq = 500;
+    case {'amw','minke','aminke','bioduck','bbb','bb-bioduck','bb-bio'}
+        sp.nrow = 4; % Number of rows per page
+        sp.ncol = 4; % Number of columns per page
+
+        sp.pre = 1;
+        sp.post = 1;
+
+        sp.sampleRate = 1000;
+        sp.nfft = 256;
+        sp.noverlap = 224;
+        sp.lowFreq = 30;
+        sp.highFreq = 500;
 end

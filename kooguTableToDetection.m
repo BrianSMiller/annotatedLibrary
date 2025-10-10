@@ -25,7 +25,11 @@ warning('off','MATLAB:table:ModifiedVarnames');
 if istable(ravenFile)
     t = ravenFile;
 else
-    t = readtable(ravenFile,'delimiter','\t');
+   t = readtable(ravenFile,'delimiter','\t');
+   if width(t) < 4 % Something is wrong if less than 4 columns, 
+       % try a different delimiter
+       t = readtable(ravenFile,'delimiter',',');
+   end
 end
 
 nDetect = height(t);
