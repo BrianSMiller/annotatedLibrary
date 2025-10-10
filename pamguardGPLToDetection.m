@@ -3,18 +3,27 @@ function [t, gpl] = pamguardGPLToDetection(binaryFolder, ...
 % Depends on pgmatlab from:
 %   https://github.com/PAMGuard/PAMGuardMatlab/releases/tag/V1.0.0
 addpath('c:\analysis\PAMGuard\pgmatlab\')
-if nargin < 1 % Test dataset
-    binaryFolder= 's:/data/longTermRecordings/detections/pamguard-GPS-Bp20/kerguelen2015/'
+if nargin < 1  % Test dataset
+    binaryFolder= 's:/data/longTermRecordings/detections/pamguard-GPL-Bp20/kerguelen2015/';
     fileMask='GPL_Detector_Generalised_Power_Law_Detector_GPL_Detections_*.pgdf';
     soundFolder = 'L:/annotatedLibrary/SORP/wav/kerguelen2015/';
     siteCode = 'kerguelen2015';
     classification = 'Bp-20';
 end
+
+if isempty(fileMask)
+    fileMask='GPL_Detector_Generalised_Power_Law_Detector_GPL_Detections_*.pgdf';
+end
+
+if ~exist(binaryFolder,'dir')
+    uigetdir(pwd,'Select folder containing PamBinaries with GPL detections:')
+end
+
 gpl = loadPamguardBinaryFolder(binaryFolder,fileMask);
 wavInfo = wavFolderInfo(soundFolder);
 wavStartDateBins = [wavInfo.startDate wavInfo(end).startDate+1/24];
-[~,filename,ext] = fileparts({wavInfo.fname}')
-filename = strcat(filename,ext)
+[~,filename,ext] = fileparts({wavInfo.fname}');
+filename = strcat(filename,ext);
 nDetect = length(gpl);
 t0 = [gpl.date]';
 t = table(t0);
@@ -24,7 +33,7 @@ t.DeltaTime_s_ = [gpl.millisDuration]'/1000;% Duration in seconds
 t.tEnd = t.t0+t.duration/86400;         % Matlab datenum
 
 % Find file index;
-[~,~,ix] = histcounts([gpl.date],wavStartDateBins)
+[~,~,ix] = histcounts([gpl.date],wavStartDateBins);
 
 t.BeginFile = filename(ix);
 t.FileOffset_s_  = (t.t0-[wavInfo(ix).startDate]')/86400;
