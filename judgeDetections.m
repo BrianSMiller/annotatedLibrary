@@ -1,4 +1,4 @@
-function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post,startIndex, increment)
+function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post,startIndex, increment, suppressClicks)
 % c = judgeAllDetections(c,sampleRate,nfft,noverlap,pre,post)
 % Manually review and judge detections from captureHistoryTable, c.
 % Audio will be resampled to sampleRate, and spectrograms will be created
@@ -7,16 +7,16 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post,startIndex, inc
 % c.t0 and c.tEnd.
 
 %% Create verdict and judged columns unless they already exist
-if ~isfield(c,'verdict')
+if ~any(strcmp('verdict',fieldnames(c)))
     c.verdict = nan(size(c.detect_observer1));
 end
-if ~isfield(c,'judged')
+if ~any(strcmp('judged',fieldnames(c)))
     c.judged = false(size(c.verdict));
 end
 
 % Program flow options
 showJudged = false;     % Set to false to bypass already judged detections
-overwriteJudged = true; % subordinate to showJudged; Set false to view-only 
+overwriteJudged = false; % subordinate to showJudged; Set false to view-only 
                         % set true to redo-adjudication 
 
 % Visualisation options
@@ -27,6 +27,9 @@ pos = [100,400,679,400];% Starting position of figure window (pixels)
 freqBand = [17 30];     % Lower and upper limits of frequency band used for color scale
 cAdjust = [5 99];       % Color scale floor and ceiling percentiles
 windowType = 'fixed';
+if nargin < 9
+    suppressClicks = [];
+end
 
 nDet = height(c);
 wavInfo = wavFolderInfo(c.soundFolder_observer1{1});
@@ -71,6 +74,22 @@ while (i <= nDet)
                 endTime = callEnd;
         end
         wav =  downsampleSingleChannelFromFiles(wavInfo,startTime,endTime,1,sampleRate);
+
+        % Remove clicks
+        if ~isempty(suppressClicks)
+            threshold = 3;
+            power = 1000;
+            if isfield(suppressClicks,'threshold')
+                threshold = suppressClicks.threshold;
+            end
+            if isfield(suppressClicks,'power')
+                power = suppressClicks.power;
+            end
+            wav = removeClicks(wav,threshold,power);
+        end
+
+
+
         [s,f,t,p] = spectrogram(wav,nfft,noverlap,[],sampleRate,'yAxis');
 
         pdB = 20*log10(p);
@@ -99,8 +118,8 @@ while (i <= nDet)
         if showObsBoxes
             l = c{i,append("t0_observer",string(1:nObservers))}-startTime;
             r = c{i,append("tEnd_observer",string(1:nObservers))}-startTime;
-            top = c{i,append("freq_2_observer",string(1:nObservers))};
-            bot = c{i,append("freq_1_observer",string(1:nObservers))};
+            top = c{i,append("freq_observer",string(1:nObservers),'_1')};
+            bot = c{i,append("freq_observer",string(1:nObservers),'_2')};
 
             ho = ishold;
             hold on;
@@ -155,7 +174,9 @@ while (i <= nDet)
 
         disp(ti);
     catch
-        lasterror
+        l = lasterror;
+        disp(l);
+        for j = 1:length(l.stack); disp(l.stack(j)); end
         fprintf('Exiting on index %g\n',i);
         return
     end
