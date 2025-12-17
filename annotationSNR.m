@@ -134,7 +134,9 @@ soundFolder = wavFolderInfo(annot.soundFolder);
 
 fileInfo = annot.fileInfo;
 if isempty(annot.fileInfo) || isempty(annot.audio) 
-    snr = nan; rmsSignal = nan; rmsNoise = nan; noiseVar = nan; return;
+    snr = nan; rmsSignal = nan; rmsNoise = nan; noiseVar = nan; 
+    fileInfo = [];
+    return;
 end
 
 
