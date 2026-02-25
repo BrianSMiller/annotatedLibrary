@@ -43,29 +43,35 @@ else
     t.channel = ones(height(t),1);
 end
 
-try
-    t0 = zeros(height(t),1);
-    % Assume wavFolderInfo has been called correctly and cache exists
-    if ismember(siteCode,{'Kerguelen2005','Kerguelen2006', ...
-            'Casey2004', ...
-            'Prydz2005','Prydz2006'})
-        wavInfo = xwavFolderInfo(soundFolder);
-    else
-        wavInfo = wavFolderInfo(soundFolder);
-    end
-    fnames = {wavInfo.fname};
-    startDates = [wavInfo.startDate];
+try % First try getting startDates from BeginFile
+    startDates = cellfun(@guessFileNameTimestamp,t.BeginFile)
     offsets = [t.FileOffset_s_];
-    beginFile = t.BeginFile;
-    for i = 1:height(t)
-        ix = contains(fnames,beginFile(i));
-        t0(i) = startDates(ix)+offsets(i)/86400;
-    end
-    t.t0 = t0;
+    t.t0 = startDates+offsets/86400;
 catch 
-    % TODO: add some graceful error handling above for situation where 
-    % t contains detections outside of soundFolder
-    keyboard
+    try
+        t0 = zeros(height(t),1);
+        % Assume wavFolderInfo has been called correctly and cache exists
+        if ismember(siteCode,{'Kerguelen2005','Kerguelen2006', ...
+                'Casey2004', ...
+                'Prydz2005','Prydz2006'})
+            wavInfo = xwavFolderInfo(soundFolder);
+        else
+            wavInfo = wavFolderInfo(soundFolder);
+        end
+        fnames = {wavInfo.fname};
+        startDates = [wavInfo.startDate];
+        offsets = [t.FileOffset_s_];
+        beginFile = t.BeginFile;
+        for i = 1:height(t)
+            ix = contains(fnames,beginFile(i));
+            t0(i) = startDates(ix)+offsets(i)/86400;
+        end
+        t.t0 = t0;
+    catch
+        % TODO: add some graceful error handling above for situation where
+        % t contains detections outside of soundFolder
+        keyboard
+    end
 end
 t.DeltaTime_s_ = t.EndTime_s_ - t.BeginTime_s_;
 t.tEnd = t.t0+t.DeltaTime_s_/86400;        % Matlab datenum
