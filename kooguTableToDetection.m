@@ -44,7 +44,7 @@ else
 end
 
 try % First try getting startDates from BeginFile
-    startDates = cellfun(@guessFileNameTimestamp,t.BeginFile)
+    startDates = cellfun(@guessFileNameTimestamp,t.BeginFile);
     offsets = [t.FileOffset_s_];
     t.t0 = startDates+offsets/86400;
 catch 

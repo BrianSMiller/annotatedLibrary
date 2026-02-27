@@ -1,10 +1,29 @@
-function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post,startIndex, increment, suppressClicks)
+function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
+    startIndex,increment,freqBand,suppressClicks)
+
 % c = judgeAllDetections(c,sampleRate,nfft,noverlap,pre,post)
 % Manually review and judge detections from captureHistoryTable, c.
 % Audio will be resampled to sampleRate, and spectrograms will be created
 % using nfft point FFTs, with noverlap points of overlap between slices.
 % Pre and post are the number of seconds of audio to load before and after
 % c.t0 and c.tEnd.
+arguments
+    c
+    sampleRate (1,1) {mustBeNumeric, mustBeNonempty}
+    nfft (1,1) {mustBeInteger, mustBePositive,mustBeNonempty}
+    noverlap (1,1) {mustBeInteger, mustBePositive,mustBeNonempty}
+    pre (1,1) {mustBeNumeric, mustBeNonempty} = 30
+    post (1,1) {mustBeNumeric, mustBeNonempty} = 30
+    startIndex (1,1) {mustBeInteger,mustBePositive} = 1
+    increment (1,1) {mustBeInteger,mustBePositive} = 1
+    freqBand (2,1) {mustBeNumeric} = [17 30];
+    suppressClicks.threshold = []
+    suppressClicks.power = []
+end
+
+if (isempty(suppressClicks.threshold))
+    suppressClicks =[];
+end
 
 %% Create verdict and judged columns unless they already exist
 if ~any(strcmp('verdict',fieldnames(c)))
@@ -24,12 +43,9 @@ cmPerPixel = 0.05;      % Horizontal pixel scaling (cm per pixel).
 showObsBoxes = true;    % Show observer detection boundaries
 windowDur = 60;         % Duration (s) of audio clip (if using fixed duration)
 pos = [100,400,679,400];% Starting position of figure window (pixels)
-freqBand = [17 30];     % Lower and upper limits of frequency band used for color scale
+% freqBand = [17 30];     % Lower and upper limits of frequency band used for color scale
 cAdjust = [5 99];       % Color scale floor and ceiling percentiles
-windowType = 'fixed';
-if nargin < 9
-    suppressClicks = [];
-end
+windowType = 'prePost';
 
 nDet = height(c);
 wavInfo = wavFolderInfo(c.soundFolder_observer1{1});
@@ -167,7 +183,12 @@ while (i <= nDet)
                     c.judged(i)=true;
                 end
                 i = i + increment;
+            case 112 % p key
+                player = audioplayer(wav,sampleRate);
+                play(player);
+                
         end
+
         % Ensure percentile stay within 0 and 100;
         cAdjust(1) = max(cAdjust(1),0);
         cAdjust(2) = min(cAdjust(2),100);
