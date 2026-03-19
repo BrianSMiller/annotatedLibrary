@@ -1,5 +1,5 @@
 function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
-    startIndex,increment,freqBand,suppressClicks,options)
+    startIndex,increment,freqBand,options)
 
 % JUDGEDETECTIONS  Manually review and label candidate detections
 %
@@ -8,11 +8,11 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %   capture history table as true positives or false positives.
 %
 %   c = judgeDetections(c, sampleRate, nfft, noverlap, pre, post, ...
-%       startIndex, increment, freqBand, suppressClicks) uses additional
-%       positional options described below.
+%       startIndex, increment, freqBand) uses additional positional options
+%       described below.
 %
 %   c = judgeDetections(___, Name, Value) additionally accepts name-value
-%       arguments for program flow and visualisation options.
+%       arguments for click suppression, program flow, and visualisation.
 %
 %   The function returns the updated table c with verdict and judged columns
 %   populated. Save c to disk after the session to preserve your work.
@@ -62,11 +62,21 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %                 on the frequency band of interest.
 %                 Default: [17 30]
 %
-%   suppressClicks - Name-value pair to suppress transient click noise:
-%                   suppressClicks.threshold  Detection threshold (default: 3)
-%                   suppressClicks.power      Suppression power (default: 1000)
-%                   Pass nothing to disable click suppression (default).
-%                   Example: judgeDetections(..., 'threshold', 3, 'power', 1000)
+% -------------------------------------------------------------------------
+%   OPTIONAL NAME-VALUE INPUTS — Click Suppression
+% -------------------------------------------------------------------------
+%   suppressClickThreshold - Detection threshold for transient click
+%                            suppression. Higher values suppress only
+%                            louder clicks. Set to [] to disable.
+%                            Default: [] (suppression disabled)
+%
+%   suppressClickPower     - Suppression power applied to detected clicks.
+%                            Higher values more aggressively attenuate.
+%                            Only used if suppressClickThreshold is set.
+%                            Default: [] (suppression disabled)
+%
+%                   Example: judgeDetections(c, 2000, 512, 256, ...
+%                       'suppressClickThreshold', 3, 'suppressClickPower', 1000)
 %
 % -------------------------------------------------------------------------
 %   OPTIONAL NAME-VALUE INPUTS — Program Flow
@@ -120,19 +130,23 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %   CONTROLS
 % -------------------------------------------------------------------------
 %   VERDICT
-%     Left click    Mark current detection as TRUE POSITIVE (verdict = 1)
-%                   and advance to the next detection.
-%     Right click   Mark current detection as FALSE POSITIVE (verdict = 0)
-%                   and advance to the next detection.
+%     Left click          Mark current detection as TRUE POSITIVE (verdict = 1)
+%                         and advance to the next detection.
+%     Right click         Mark current detection as FALSE POSITIVE (verdict = 0)
+%                         and advance to the next detection.
+%     Middle click or -   Mark current detection as OTHER (verdict = -1)
+%                         and advance to the next detection.
+%
+%   AUDIO
+%     P                   Play the audio clip for the current detection window.
 %
 %   INFORMATION
-%     I             Print the capture history fields and values to console
-%   AUDIO
-%     P             Play the audio clip for the current detection window.
-%   SCREENSHOT      
-%     S             Save the adjudication window as a png named
-%                   'adjudication_n.png where n is the row from the capture
-%                   history table
+%     I                   Print the capture history fields and values for the
+%                         current detection to the console.
+%
+%   SCREENSHOT
+%     S                   Save the current figure as 'adjudication_NNN.png'
+%                         where NNN is the row index in c.
 %
 %   DISPLAY — Arrow keys adjust the colour scale percentiles used for
 %   contrast. The current floor/ceiling percentiles are shown in the title.
@@ -169,8 +183,8 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %   c = judgeDetections(c, 2000, 512, 256, 30, 30, 50, 2);
 %
 %   % Enable click suppression
-%   c = judgeDetections(c, 2000, 512, 256, 30, 30, 1, 1, [17 30], ...
-%       'threshold', 3, 'power', 1000);
+%   c = judgeDetections(c, 2000, 512, 256, 'suppressClickThreshold', 3, ...
+%       'suppressClickPower', 1000);
 %
 %   % Review already-judged detections and allow overwriting
 %   c = judgeDetections(c, 2000, 512, 256, 'showJudged', true, ...
@@ -196,8 +210,9 @@ arguments
     startIndex   (1,1) {mustBeInteger, mustBePositive} = 1
     increment    (1,1) {mustBeInteger, mustBePositive} = 1
     freqBand     (1,2) {mustBeNumeric}                 = [17 30] % Hz
-    suppressClicks.threshold = []
-    suppressClicks.power     = []
+    % Click suppression
+    options.suppressClickThreshold = []
+    options.suppressClickPower     = []
     % Program flow
     options.showJudged      (1,1) logical = false
     options.overwriteJudged (1,1) logical = false
@@ -209,10 +224,6 @@ arguments
     options.showObsBoxes (1,1) logical                        = true
     options.cmPerPixel  (1,1) {mustBeNumeric, mustBePositive} = 0.05
     options.figPos      (1,4) {mustBeNumeric}                 = [100 400 679 400]
-end
-
-if (isempty(suppressClicks.threshold))
-    suppressClicks = [];
 end
 
 % Unpack options into local variables for readability
@@ -278,14 +289,11 @@ while (i <= nDet)
         wav =  getAudioFromFiles(wavInfo,startTime,endTime,newRate=sampleRate);
 
         % Remove clicks
-        if ~isempty(suppressClicks)
-            threshold = 3;
+        if ~isempty(options.suppressClickThreshold)
+            threshold = options.suppressClickThreshold;
             power = 1000;
-            if isfield(suppressClicks,'threshold')
-                threshold = suppressClicks.threshold;
-            end
-            if isfield(suppressClicks,'power')
-                power = suppressClicks.power;
+            if ~isempty(options.suppressClickPower)
+                power = options.suppressClickPower;
             end
             wav = removeClicks(wav,threshold,power);
         end
