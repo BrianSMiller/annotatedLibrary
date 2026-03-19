@@ -1,5 +1,5 @@
-function [cap] = captureHistoryTable2(table1, table2, varargin )
-% function [cap, cm] = captureHistoryTable(table1, table2, varargin )
+function [cap] = captureHistoryTable(table1, table2, varargin )
+% function [cap] = captureHistoryTable2(table1, table2, varargin)
 % Create a Capture History Table, CAP, from two tables of detections,
 % table1 & table2. Rows in the capture history table represent detections,
 % and detection time-frequency bounds from the two tables are compared to
@@ -26,7 +26,19 @@ function [cap] = captureHistoryTable2(table1, table2, varargin )
 % respectively. Key is an identifier used to match detections between
 % tables. Duplicate values of key indicate duplicate matches between table
 % 2 and table 1.
+%
+% Optional Name-Value Arguments:
+%   'timeBuffer'  - Time buffer in days applied to both ends of each time
+%                   interval before checking for overlap. Two detections
+%                   within +/- timeBuffer of each other will be considered
+%                   overlapping in time. Default: 0 (exact overlap required).
+%                   Example: 1/86400 allows a 1-second gap between detections.
 
+% Parse optional name-value arguments
+p = inputParser;
+addParameter(p, 'timeBuffer', 0);  % Time buffer in days (matches t0/tEnd units)
+parse(p, varargin{:});
+timeBuffer = p.Results.timeBuffer;
 
 % Start the capture history table by adding all of the detections from
 % table 1. 
@@ -64,7 +76,7 @@ k = height(table1);
 for j = 1:height(table2)
     s1 = start1(j); e1 = end1(j);
    
-    overlapIx = find(doTimespansOverlap(s1, e1, start2, end2));
+    overlapIx = find(doTimespansOverlap(s1, e1, start2, end2, timeBuffer));
     overlap = 0; 
     otherMatches = 0;
     
