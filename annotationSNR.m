@@ -129,8 +129,12 @@ if length(annot) > 1
 end
 
 soundFolder = wavFolderInfo(annot.soundFolder);
+newRate = soundFolder(1).sampleRate; % new rate same as old rate (don't resample)
+
+% Annotations should be only for a single channel (default=1);
 [annot.audio, ~, annot.fileInfo] = getAudioFromFiles(soundFolder, ...
-    annot.t0,annot.tEnd);
+    annot.t0, annot.tEnd, newRate=newRate);
+
 
 fileInfo = annot.fileInfo;
 if isempty(annot.fileInfo) || isempty(annot.audio) 
@@ -159,39 +163,29 @@ switch(params.noiseDuration)
     case 'before'
         noise.tEnd = annot.t0-params.noiseDelay/86400; % end of noise is 1 s before annotation
         noise.t0 = noise.tEnd-annot.duration/86400;
-%         [noise.audio, ~, ~] = getAudioFromFiles(soundFolder, ...
-%             noise.t0,noise.tEnd);
-%         excludeTimes = [];
     case '25sBefore' % as requested by Franciele Castro for SORP ATWG post-doc
         % load only 25 s before the detection
         noiseDuration = 25/86400; % 25 s (converted to days/matlab datenum)
         noise.tEnd = annot.t0-params.noiseDelay/86400; % end of noise is 1 s before annotation
         noise.t0 = noise.tEnd - noiseDuration;
         excludeTimes = []; % Placeholder for logic to check for other signals
-%         [noise.audio, ~, ~] = getAudioFromFiles(soundFolder,noise.t0,noise.tEnd);
     case '30sBeforeAndAfter'
         noise.tEnd = annot.tEnd + (30 + params.noiseDelay)/86400;
         noise.t0 = annot.t0 - (30 + params.noiseDelay)/86400;
         excludeTimes = [annot.t0 annot.tEnd] + params.noiseDelay*([-1 1]/86400);
-%         [noise.audio, ~, ~] = getAudioFromFiles(soundFolder, ...
-%             noise.t0,noise.tEnd,excludeTimes);
     case 'randomBeforeAndAfter'
         params.noiseDelay = rand * params.noiseDelay;
         noise.tEnd = annot.tEnd + (0.5*annot.duration + params.noiseDelay)/86400;
         noise.t0 = annot.t0 - (0.5*annot.duration + params.noiseDelay)/86400;
         excludeTimes = [annot.t0 annot.tEnd] + params.noiseDelay*([-1 1]/86400);
-%         [noise.audio, ~, ~] = getAudioFromFiles(soundFolder, ...
-%             noise.t0,noise.tEnd,excludeTimes);
     otherwise % Default to using noise before and after the sound
         noise.tEnd = annot.tEnd + (0.5*annot.duration + params.noiseDelay)/86400;
         noise.t0 = annot.t0 - (0.5*annot.duration + params.noiseDelay)/86400;
         excludeTimes = [annot.t0 annot.tEnd] + params.noiseDelay*([-1 1]/86400);
-%         [noise.audio, ~, ~] = getAudioFromFiles(soundFolder, ...
-%             noise.t0,noise.tEnd,excludeTimes);
 end
 
 [noise.audio, ~, ~] = getAudioFromFiles(soundFolder, ...
-    noise.t0,noise.tEnd,excludeTimes);
+    noise.t0, noise.tEnd, exclusions=excludeTimes, channel=noise.channel);
 
 % Bail out if there is not enough noise for at least 1 FFT slice 
 if size(noise.audio,1)<nfft
@@ -522,7 +516,8 @@ for i = 1:length(detection)
     c.t0 = noise.t0-spectroParams.pre/86400;
     c.tEnd = max([detection.tEnd noise.tEnd]) + spectroParams.post/86400;
     c.duration = (c.tEnd - c.t0)*86400;
-    c.audio = getAudioFromFiles(soundFolder,c.t0,c.tEnd);
+    c.audio = getAudioFromFiles(soundFolder,c.t0,c.tEnd, channel=c.channel, ...
+        newRate=sampleRate);
     if ( c.duration*sampleRate < spectroParams.win ) 
         % Cannot show spectrogram, so just skip
         continue;
