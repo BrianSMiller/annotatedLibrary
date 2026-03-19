@@ -125,8 +125,14 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %     Right click   Mark current detection as FALSE POSITIVE (verdict = 0)
 %                   and advance to the next detection.
 %
+%   INFORMATION
+%     I             Print the capture history fields and values to console
 %   AUDIO
 %     P             Play the audio clip for the current detection window.
+%   SCREENSHOT      
+%     S             Save the adjudication window as a png named
+%                   'adjudication_n.png where n is the row from the capture
+%                   history table
 %
 %   DISPLAY — Arrow keys adjust the colour scale percentiles used for
 %   contrast. The current floor/ceiling percentiles are shown in the title.
@@ -147,7 +153,7 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %   - If an error occurs during a detection, the function prints the stack
 %     trace and exits, returning c as modified up to that point. Save c
 %     immediately after a session ends.
-%   - Audio is loaded using downsampleSingleChannelFromFiles, which must be
+%   - Audio is loaded using getAudioFromFiles, which must be
 %     on the MATLAB path.
 %
 % -------------------------------------------------------------------------
@@ -239,7 +245,7 @@ while (i <= nDet)
     pos = get(gcf,'pos');
     msg = '';
     try
-        if c.judged(i)==true & ~isnan(c.verdict(i))
+        if c.judged(i)==true && ~isnan(c.verdict(i))
             if showJudged
                 msg = sprintf('Already judged as %g', c.verdict(i));
             else
@@ -269,7 +275,7 @@ while (i <= nDet)
                 startTime = callStart;
                 endTime = callEnd;
         end
-        wav =  downsampleSingleChannelFromFiles(wavInfo,startTime,endTime,1,sampleRate);
+        wav =  getAudioFromFiles(wavInfo,startTime,endTime,newRate=sampleRate);
 
         % Remove clicks
         if ~isempty(suppressClicks)
@@ -314,9 +320,13 @@ while (i <= nDet)
         if showObsBoxes
             l = c{i,append("t0_observer",string(1:nObservers))}-startTime;
             r = c{i,append("tEnd_observer",string(1:nObservers))}-startTime;
-            top = c{i,append("freq_observer",string(1:nObservers),'_1')};
-            bot = c{i,append("freq_observer",string(1:nObservers),'_2')};
-
+            try % Format as of 2026-03-18
+                top = c{i,append("freq_observer",string(1:nObservers),'_1')};
+                bot = c{i,append("freq_observer",string(1:nObservers),'_2')};
+            catch % Format from 2025-10-31
+                top = c{i,append("freq_1_observer",string(1:nObservers))};
+                bot = c{i,append("freq_2_observer",string(1:nObservers))};
+            end
             ho = ishold;
             hold on;
             obsColors = lines(nObservers);
@@ -327,13 +337,13 @@ while (i <= nDet)
             if ho==0; hold off; end
         end
 
-        ti = sprintf('#% 4g/%g floor/ceil percentile=[%g %g]\t(Row % 4g: %s)',...
-            1+(i-1)/increment,floor(nDet/increment), cAdjust, ...
-            i, datestr(c.t0(i)));
+        ti = {sprintf('#% 4g/%g floor/ceil percentile=[%g %g]',...
+            1+(i-1)/increment,floor(nDet/increment), cAdjust), ...
+            sprintf('(Row % 4g: %s)',i, datestr(c.t0(i)))};
 
         title(ti);
         text(mean(xlim),max(ylim),msg,'VerticalAlignment','top',...
-            'FontSize',14,'FontWeight','bold');
+            'FontSize',14,'FontWeight','bold','HorizontalAlignment','center','BackgroundColor','w');
 
         pos(3) = size(s,2)*cmPerPixel;
         set(gcf,'position',pos);
@@ -363,9 +373,20 @@ while (i <= nDet)
                     c.judged(i)=true;
                 end
                 i = i + increment;
-            case 112 % p key
+            case {2,45} % -/Minus-key/Middle click for 'other'
+                % Only write if new verdicts (unless overwrite is true)
+                if c.judged(i)~=true || overwriteJudged
+                    c.verdict(i) = -1;
+                    c.judged(i)=true;
+                end
+                i = i + increment;
+            case 105 % i key - print capture history row in console
+                disp(table2struct(c(i,:)))
+            case 112 % p key - Play visible audio
                 player = audioplayer(wav,sampleRate);
                 play(player);
+            case 115 % s key - save screenshot
+                saveAsPng(sprintf('adjudication_%03g',i))
                 
         end
 
