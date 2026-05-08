@@ -16,6 +16,7 @@ The code included in this repository is a grab-bag of different functions that w
 ## Installation
 1) Download and install dependencies. The code in this repository depends on: 
   * [soundFolder](https://github.com/BrianSMiller/soundFolder) to streamline accessing of wav files.
+  * [bsmUtils](https://github.com/BrianSMiller/bsmUtils) for miscellaneous utility functions.
   * [mksqlite](https://mksqlite.sourceforge.net/) for accessing PAMGuard sqlite databases
 2) Download the repository to a location on your computer
 3) Add the location of the downloaded files to the Matlab path
