@@ -81,8 +81,8 @@ if ~isfield(params,'noiseDuration')
 end
 
 if ~isfield(params,'snrType')
-    params.snrType = 'spectrogramSlices'; % Used by Annotated Library
-    % params.snrType = 'spectrogram';
+    % params.snrType = 'spectrogramSlices'; % Used by Annotated Library
+    params.snrType = 'spectrogram';
     % params.snrType = 'quantiles';
     % params.snrType = 'timeDomain';
     
@@ -129,21 +129,32 @@ if length(annot) > 1
 end
 
 soundFolder = wavFolderInfo(annot.soundFolder);
-[annot.audio, ~, annot.fileInfo] = getAudioFromFiles(soundFolder,annot.t0,annot.tEnd);
+newRate = soundFolder(1).sampleRate; % new rate same as old rate (don't resample)
+
+% Annotations should be only for a single channel (default=1);
+[annot.audio, ~, annot.fileInfo] = getAudioFromFiles(soundFolder, ...
+    annot.t0, annot.tEnd, newRate=newRate);
+
 
 fileInfo = annot.fileInfo;
-if isempty(annot.fileInfo) || isempty(annot.audio)
-    snr = nan;
-    rmsSignal = nan;
-    rmsNoise = nan;
-    noiseVar = nan;
+if isempty(annot.fileInfo) || isempty(annot.audio) 
+    snr = nan; rmsSignal = nan; rmsNoise = nan; noiseVar = nan; 
+    fileInfo = [];
     return;
 end
 
+
 % Assume all files are at the same sample rate
 sampleRate = annot.fileInfo(1).sampleRate;
+
+% TODO: provide more granular control of spectrogram parameters
 nfft = 2^(nextpow2(floor(annot.duration/nSlices / overlap * sampleRate)));
 nOverlap = floor(nfft*overlap); % overlap in samples
+
+% Bail out if there's not enough signal for at least 1 FFT slice
+if annot.duration*sampleRate < nfft 
+    snr = nan; rmsSignal = nan;  rmsNoise = nan; noiseVar = nan;  return;
+end
 
 
 % Create a noise data structure just a bit earlier than the annotation
@@ -152,32 +163,50 @@ switch(params.noiseDuration)
     case 'before'
         noise.tEnd = annot.t0-params.noiseDelay/86400; % end of noise is 1 s before annotation
         noise.t0 = noise.tEnd-annot.duration/86400;
-        [noise.audio, ~, noise.fileInfo] = getAudioFromFiles(soundFolder,noise.t0,noise.tEnd);
-        excludeTimes = [];
     case '25sBefore' % as requested by Franciele Castro for SORP ATWG post-doc
         % load only 25 s before the detection
         noiseDuration = 25/86400; % 25 s (converted to days/matlab datenum)
         noise.tEnd = annot.t0-params.noiseDelay/86400; % end of noise is 1 s before annotation
         noise.t0 = noise.tEnd - noiseDuration;
         excludeTimes = []; % Placeholder for logic to check for other signals
-        [noise.audio, ~, noise.fileInfo] = getAudioFromFiles(soundFolder,noise.t0,noise.tEnd);
     case '30sBeforeAndAfter'
         noise.tEnd = annot.tEnd + (30 + params.noiseDelay)/86400;
         noise.t0 = annot.t0 - (30 + params.noiseDelay)/86400;
         excludeTimes = [annot.t0 annot.tEnd] + params.noiseDelay*([-1 1]/86400);
-        [noise.audio, ~, noise.fileInfo] = getAudioFromFiles(soundFolder,noise.t0,noise.tEnd,excludeTimes);
     case 'randomBeforeAndAfter'
         params.noiseDelay = rand * params.noiseDelay;
         noise.tEnd = annot.tEnd + (0.5*annot.duration + params.noiseDelay)/86400;
         noise.t0 = annot.t0 - (0.5*annot.duration + params.noiseDelay)/86400;
         excludeTimes = [annot.t0 annot.tEnd] + params.noiseDelay*([-1 1]/86400);
-        [noise.audio, ~, noise.fileInfo] = getAudioFromFiles(soundFolder,noise.t0,noise.tEnd,excludeTimes);
     otherwise % Default to using noise before and after the sound
         noise.tEnd = annot.tEnd + (0.5*annot.duration + params.noiseDelay)/86400;
         noise.t0 = annot.t0 - (0.5*annot.duration + params.noiseDelay)/86400;
         excludeTimes = [annot.t0 annot.tEnd] + params.noiseDelay*([-1 1]/86400);
-        [noise.audio, ~, noise.fileInfo] = getAudioFromFiles(soundFolder,noise.t0,noise.tEnd,excludeTimes);
 end
+
+[noise.audio, ~, ~] = getAudioFromFiles(soundFolder, ...
+    noise.t0, noise.tEnd, exclusions=excludeTimes, channel=noise.channel);
+
+% Bail out if there is not enough noise for at least 1 FFT slice 
+if size(noise.audio,1)<nfft
+    snr = nan; rmsSignal = nan;  rmsNoise = nan; noiseVar = nan;  return;
+end
+
+% Remove clicks
+if isfield(params,'removeClicks')
+    threshold = 3;
+    power = 1000;
+    if isfield(params.removeClicks,'threshold')
+        threshold = params.removeClicks.threshold;
+    end
+    if isfield(params.removeClicks,'power')
+        power = params.removeClicks.power;
+    end
+    annot.audio = removeClicks(annot.audio,threshold,power);
+    noise.audio = removeClicks(noise.audio,threshold,power);
+end
+
+
 
 switch params.snrType
     case 'spectrogram'
@@ -319,10 +348,11 @@ if showClips
         spectroParams.noiseDelay = params.noiseDelay/86400;
         %         pixelsPerSecond = 1;
         %         spectroParams.horizontalPixels = 2*spectroParams.horizontalPixels*c.duration
+        horizScale = 1920/860;
+        sliceDuration = spectroParams.win/sampleRate*(1-spectroParams.overlapPercent);
+        spectroParams.horizontalPixels = horizScale * (3*annot.duration+1+spectroParams.pre+spectroParams.post)/sliceDuration;
+
     end
-    horizScale = 1920/860;
-    sliceDuration = spectroParams.win/sampleRate*(1-spectroParams.overlapPercent);
-    spectroParams.horizontalPixels = horizScale * (3*annot.duration+1+spectroParams.pre+spectroParams.post)/sliceDuration;
 
     spectroAnnotationAndNoise(annot, noise, soundFolder, spectroParams, snr,...
         params.metadata)
@@ -366,7 +396,12 @@ if length(x) < window
     nfft = window;
 end
 x = x-mean(x);
-[~, sF, sT, specPsd] = spectrogram(x,window,nOverlap,nfft,sampleRate);
+try
+    [~, sF, sT, specPsd] = spectrogram(x,window,nOverlap,nfft,sampleRate);
+catch
+    power=nan; variance=nan; sT=nan;
+    return
+end
 
 % Apply calibration if recording metadata has been supplied
 if ~isempty(metadata) 
@@ -481,11 +516,18 @@ for i = 1:length(detection)
     c.t0 = noise.t0-spectroParams.pre/86400;
     c.tEnd = max([detection.tEnd noise.tEnd]) + spectroParams.post/86400;
     c.duration = (c.tEnd - c.t0)*86400;
-    c.audio = getAudioFromFiles(soundFolder,c.t0,c.tEnd);
+    c.audio = getAudioFromFiles(soundFolder,c.t0,c.tEnd, channel=c.channel, ...
+        newRate=sampleRate);
     if ( c.duration*sampleRate < spectroParams.win ) 
         % Cannot show spectrogram, so just skip
         continue;
     end
+
+    % Remove clicks if requested
+    threshold = 3;
+    power = 1000;
+    c.audio = removeClicks(c.audio,threshold,power);
+
     [~, f, t, p] = spectrogram(c.audio,...
         spectroParams.win, spectroParams.overlap, spectroParams.win,...
         sampleRate,'yaxis');
@@ -512,12 +554,12 @@ for i = 1:length(detection)
     axInset = get(gca,'tightInset');
     pos = get(gcf,'position');
     width = spectroParams.horizontalPixels;
-    cb = colorbar('north');
+    cb = colorbar('northoutside');
     set(gcf,'pos',[pos(1:2),...
         width+sum(axInset([1,3]))*2.5,...
         spectroParams.verticalPixels+sum(axInset([2,4]))*2]);
 
-    set(gca,'position',[axPos(1:2) width spectroParams.verticalPixels])
+    set(gca,'position',[axPos(1:2) width-20 spectroParams.verticalPixels-100])
     findfigs;
 
     % Red line for noise

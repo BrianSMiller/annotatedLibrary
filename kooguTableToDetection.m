@@ -25,7 +25,11 @@ warning('off','MATLAB:table:ModifiedVarnames');
 if istable(ravenFile)
     t = ravenFile;
 else
-    t = readtable(ravenFile,'delimiter','\t');
+   t = readtable(ravenFile,'delimiter','\t');
+   if width(t) < 4 % Something is wrong if less than 4 columns, 
+       % try a different delimiter
+       t = readtable(ravenFile,'delimiter',',');
+   end
 end
 
 nDetect = height(t);
@@ -39,18 +43,39 @@ else
     t.channel = ones(height(t),1);
 end
 
-try
+try % First Check soundFolders
     t0 = zeros(height(t),1);
     % Assume wavFolderInfo has been called correctly and cache exists
-    wavInfo = wavFolderInfo(soundFolder);
+    if ismember(siteCode,{'Kerguelen2005','Kerguelen2006', ...
+            'Casey2004', ...
+            'Prydz2005','Prydz2006'})
+        wavInfo = xwavFolderInfo(soundFolder);
+    else
+        wavInfo = wavFolderInfo(soundFolder);
+    end
+    fnames = {wavInfo.fname};
+    startDates = [wavInfo.startDate];
+    offsets = [t.FileOffset_s_];
+    beginFile = t.BeginFile;
     parfor i = 1:height(t)
-        ix = contains({wavInfo.fname},t.BeginFile(i));
-        t0(i) = wavInfo(ix).startDate+t.FileOffset_s_(i)/86400;
+        ix = contains(fnames,beginFile(i));
+        t0(i) = startDates(ix)+offsets(i)/86400;
     end
     t.t0 = t0;
 catch
-    keyboard
+    try % If soundFolder are problematic try getting startDates from
+        % BeginFile
+        startDates = cellfun(@guessFileNameTimestamp,t.BeginFile);
+        offsets = [t.FileOffset_s_];
+        t.t0 = startDates+offsets/86400;
+    catch
+        % TODO: add some graceful error handling above for situation where
+        % t contains detections outside of soundFolder
+        keyboard
+    end
 end
+
+
 t.DeltaTime_s_ = t.EndTime_s_ - t.BeginTime_s_;
 t.tEnd = t.t0+t.DeltaTime_s_/86400;        % Matlab datenum
 t.duration = (t.tEnd-t.t0)*86400;          % Duration in seconds

@@ -1,4 +1,4 @@
-function [ tab ] = loadPamguardDetectionTable( fileName, tableName, verbose );
+function [ tab ] = loadPamguardDetectionTable( fileName, tableName, verbose )
 % loadPamguardDetectionTimes: Load detection times of clicks from PAMGuard's 
 % database.
 % fileName - name of PAMGuard's sqlite database
@@ -31,7 +31,7 @@ if verbose
     fprintf('Finished reading from database.\n');
     toc
 end
-tab = struct2table(result);
+tab = struct2table(result,AsArray=true);
 try
 tab.t0 = datenum(tab.UTC,'yyyy-mm-dd HH:MM:SS.fff');
 tab.tEnd = tab.t0 + tab.DurationSeconds/86400;

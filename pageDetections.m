@@ -1,21 +1,21 @@
-function pageDetections(c,wavFolder,sp)
+function pageDetections(c,wavFolder,sp,k)
 % c = readtable('captureHistory_casey2019MGA_vs_denseNetBmD24_judgedBSM_cut.csv');
 % wavFolder = 'm:\annotatedLibrary_AAD\Casey2019\wav\';
 % sp: Spectrogram parameters 
 nDet = height(c);
 % % wavInfo = wavFolderInfo(c.soundFolder_table1{1});
-wavInfo = wavFolderInfo(wavFolder)
+wavInfo = wavFolderInfo(wavFolder);
 % saveFile = 'captureHistory_casey2019MGA_vs_denseNetBmD17_judgedBSM.csv'
 
 
 %% View spectrogram clips of detections
 if nargin < 3
-    sp = spectroParams('blue');
+    sp = spectroParams('fin');
 end
 sampleRateOrig = wavInfo(1).sampleRate;
-
+sampleRate = sp.sampleRate;
 button = 1;
-k = 14000;
+if nargin < 4; k = 1; end
 
 while button ~=27 
 % for k = 1:nrow*ncol:height(c) % outer loop for pages
@@ -32,17 +32,18 @@ while button ~=27
         % use a 10 s window around the mid-point of the call
 %         startTime = min(c.t0_table1(ix), c.t0_table2(ix));
 %         endTime = max(c.tEnd_table1(ix),  c.tEnd_table2(ix));
-        startTime = c.t0(ix);
-        endTime = c.tEnd(ix);
-        midpoint = mean([startTime endTime]);
-        c.FileOffset_s_(ix)  = c.FileOffset_s_(ix) - sp.pre;
-        c.DeltaTime_s_(ix) =  c.DeltaTime_s_(ix) + sp.post;
+        startTime = c.t0(ix)-sp.pre/86400;
+        endTime = c.tEnd(ix)+sp.post/86400;
+%         midpoint = mean([startTime endTime]);
+%         c.FileOffset_s_(ix)  = max([0 c.FileOffset_s_(ix) - sp.pre]);
+%         c.DeltaTime_s_(ix) =  c.DeltaTime_s_(ix) + sp.post;
 
 %         wav =  downsampleSingleChannelFromFiles(wavInfo,startTime,endTime,1,sampleRate);
-        wav = downsampleFromWav(c(ix,:),sampleRateOrig,sp.sampleRate);
-        [s,f,t,p] = spectrogram(wav,sp.nfft,sp.noverlap,sp.nfft,sp.sampleRate,'yAxis');
+        wav =  getAudioFromFiles(wavInfo,startTime,endTime,[],1,sampleRate);
+%         wav = downsampleFromWav(c(ix,:),sampleRateOrig,sp.sampleRate);
+        [~,f,t,p] = spectrogram(wav,sp.nfft,sp.noverlap,sp.nfft,sp.sampleRate,'yAxis');
         
-        pdB = 20*log10(p);
+        pdB = 10*log10(p);
         fIx = double(f > sp.lowFreq & f < sp.highFreq);
         nanIx = find(fIx==0);
         fIx(nanIx)=nan(size(nanIx));
@@ -91,8 +92,11 @@ while button ~=27
 end
 
 function wav = downsampleFromWav(c,inputRate,outputRate)
-startSample = c.FileOffset_s_*inputRate;
-endSample = startSample + (c.DeltaTime_s_*inputRate);
+ai = audioinfo(fullfile(c.soundFolder{1},c.BeginFile{1}));
+
+startSample = c.FileOffset_s_*inputRate+1;
+endSample = min(startSample + (c.DeltaTime_s_*inputRate), ai.TotalSamples);
+
 wav = audioread(fullfile(c.soundFolder{1},c.BeginFile{1}),floor([startSample, endSample]));
 q =  inputRate/outputRate;
 wav = resample(wav,1,q);
