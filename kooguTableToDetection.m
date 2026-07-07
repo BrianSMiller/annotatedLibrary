@@ -46,13 +46,13 @@ end
 try % First Check soundFolders
     t0 = zeros(height(t),1);
     % Assume wavFolderInfo has been called correctly and cache exists
-    if ismember(siteCode,{'Kerguelen2005','Kerguelen2006', ...
-            'Casey2004', ...
-            'Prydz2005','Prydz2006'})
-        wavInfo = xwavFolderInfo(soundFolder);
-    else
+%     if ismember(siteCode,{'Kerguelen2005','Kerguelen2006', ...
+%             'Casey2004', ...
+%             'Prydz2005','Prydz2006'})
+%         wavInfo = xwavFolderInfo(soundFolder);
+%     else
         wavInfo = wavFolderInfo(soundFolder);
-    end
+%     end
     fnames = {wavInfo.fname};
     startDates = [wavInfo.startDate];
     offsets = [t.FileOffset_s_];
