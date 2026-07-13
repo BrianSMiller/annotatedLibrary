@@ -81,8 +81,45 @@ for i = 1:numel(vars)
     xlabel('Count');
     set(ax2, 'YTickLabel', []);
     grid on;
+
+    
 end
 
 tl.Title.String = 'SNR / NL / RL diagnostics';
 tl.Title.Interpreter='none';
+
+% Add after the existing vars loop in qcSnrDiagnosticPlots, before the
+% tl.Title line. Requires RL and (fLow,fHigh) present.
+
+hasBandCols = all(ismember({'RL','fLow','fHigh'}, detTable.Properties.VariableNames));
+if hasBandCols
+    bw = detTable.fHigh - detTable.fLow;
+    rl = detTable.RL;
+    good = isfinite(bw) & isfinite(rl) & bw > 0;
+
+    if any(good)
+        % Full-width row for the scatter
+        figure;
+        scatter(bw(good), rl(good), 8, 'filled', ...
+            'MarkerFaceAlpha', 0.3, 'MarkerFaceColor', [0.2 0.4 0.8]);
+        xlabel('Bandwidth (Hz)');
+        ylabel('RL band level (dB re 1 \muPa)');
+        title('RL vs bandwidth (correlation \rightarrow low levels are narrow, not quiet)');
+        grid on;
+
+        % Overlay the correlation and a robust fit line so the relationship
+        % is quantified, not just eyeballed
+        r = corr(bw(good), rl(good), 'type', 'Spearman');
+        hold on;
+        pf = polyfit(bw(good), rl(good), 1);
+        xl = xlim;
+        plot(xl, polyval(pf, xl), 'r-', 'LineWidth', 1.2);
+        text(0.02, 0.95, sprintf('Spearman \\rho = %.2f', r), ...
+            'Units','normalized', 'VerticalAlignment','top', ...
+            'BackgroundColor','w', 'FontSize', 9);
+        hold off;
+    end
+end
+
+
 end

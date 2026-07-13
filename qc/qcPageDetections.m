@@ -55,7 +55,7 @@ hasRL   = any(strcmp('RL', c.Properties.VariableNames));
 hasNL   = any(strcmp('NL', c.Properties.VariableNames));
 hasFreq = all(ismember({'fLow','fHigh'}, c.Properties.VariableNames)) || ...
           any(strcmp('freq', c.Properties.VariableNames));
-if hasFreq && ~any(strcmp('fLow',c.Properties.VariableNames))
+if any(strcmp('freq', c.Properties.VariableNames))
     c.fLow  = c.freq(:,1);
     c.fHigh = c.freq(:,2);
 end
