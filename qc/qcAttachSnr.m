@@ -28,9 +28,37 @@ function detTable = qcAttachSnr(detTable, varargin)
 %   ...          - any other snrEstimate params, passed through as-is
 %
 % Output
-%   detTable    - input table with snr, RL, NL columns appended. RL/NL
-%                 are calibrated (dB re 1 uPa) if calibration was supplied,
-%                 otherwise uncalibrated RMS dB.
+%   detTable    - input table with the following appended/updated:
+%                   snr, RL, NL  -- as before. RL/NL are calibrated
+%                                (dB re 1 uPa) if calibration was
+%                                supplied, otherwise uncalibrated RMS dB.
+%                   t0, tEnd, freq  -- OVERWRITTEN IN PLACE (2026-07-24)
+%                                with bsnr's recovered bounds, for
+%                                methods with a bounds-refinement concept
+%                                (momentumRidge, kalmanRidge). Unchanged
+%                                for every other method, or when
+%                                refinement found no call at trackable
+%                                confidence (dropout, no fallback) --
+%                                deliberately in place, not a separate
+%                                column, so every EXISTING downstream
+%                                consumer that already reads t0/tEnd/freq
+%                                as canonical (qcPageDetections,
+%                                qcValidateDetections,
+%                                qcFlagDistributionPlots, matchbox, ...)
+%                                benefits automatically with no changes
+%                                needed there.
+%                   originalT0, originalTEnd, originalFreq  -- NEW. The
+%                                detector's TRUE original bounds,
+%                                preserved before any overwrite above.
+%                                Guarded against qcAttachSnr running
+%                                twice on the same table -- only
+%                                populated if not already present, so a
+%                                second call can't clobber the real
+%                                original with an already-refined value.
+%                   boundsRefined -- NEW. true where t0/tEnd/freq above
+%                                are genuinely refined, false where
+%                                they're unchanged from originalT0/
+%                                originalTEnd/originalFreq.
 %
 % NOTE: bsnr's documented output field for calibrated signal level is
 % signalBandLevel_dBuPa. The doc doesn't explicitly name the calibrated
@@ -71,7 +99,7 @@ elseif ~isfield(params,'nfft')
          'comparable across detections.']);
 end
 
-result = snrEstimate(detTable, params);
+result = snrEstimateQuiet(detTable, params);
 
 detTable.snr = result.snr;
 
@@ -86,4 +114,65 @@ if any(strcmp('noiseBandLevel_dBuPa',result.Properties.VariableNames))
 elseif any(strcmp('noiseRMSdB',result.Properties.VariableNames))
     detTable.NL = result.noiseRMSdB;
 end
+
+% NEW (2026-07-24): recovered bounds. Preserve the detector's TRUE
+% original bounds first (guarded against qcAttachSnr running twice on
+% the same table -- only copy if not already present, so a second call
+% can't overwrite the real original with an already-refined value), then
+% overwrite t0/tEnd/freq in place with bsnr's result. Safe for
+% non-refined rows too: result.t0/tEnd/freq already equal the original
+% values there (boundsRefined==false), so the overwrite is a no-op.
+% Deliberately IN PLACE, not a separate refinedXxx column -- every
+% existing downstream consumer (qcPageDetections, qcValidateDetections,
+% qcFlagDistributionPlots, matchbox, ...) already reads t0/tEnd/freq as
+% canonical; a differently-named column would need each of those
+% individually updated to know to prefer it.
+if all(ismember({'t0','tEnd','freq','boundsRefined'}, result.Properties.VariableNames))
+    if ~any(strcmp('originalT0', detTable.Properties.VariableNames))
+        detTable.originalT0   = detTable.t0;
+        detTable.originalTEnd = detTable.tEnd;
+        detTable.originalFreq = detTable.freq;
+    end
+    detTable.t0            = result.t0;
+    detTable.tEnd           = result.tEnd;
+    detTable.freq           = result.freq;
+    detTable.boundsRefined  = result.boundsRefined;
+    % Keep fLow/fHigh columns (if present) in sync with the new freq --
+    % several QC functions (qcSummaryReport in particular) read fLow/
+    % fHigh directly rather than deriving them from freq at read-time.
+    if all(ismember({'fLow','fHigh'}, detTable.Properties.VariableNames))
+        detTable.fLow  = result.freq(:,1);
+        detTable.fHigh = result.freq(:,2);
+    end
+    nRefined = sum(result.boundsRefined);
+    fprintf('qcAttachSnr: %d of %d rows got refined bounds (snrType=''%s'')\n', ...
+        nRefined, height(detTable), opt.snrType);
+end
+
+end
+
+function result = snrEstimateQuiet(detTable, params)
+% Suppress kalmanRidge's dropout warnings for the duration of this batch
+% call -- both on the client AND on any existing parallel pool workers
+% (warning state is per-session; a plain warning('off',...) in the client
+% never reaches workers that already existed before this call, which is
+% the actual cause if warnings still show up despite this wrapper --
+% see this function specifically, not a client-only warning toggle).
+warnIds = {'snrKalmanRidge:dropout', 'deriveBoundsFromPresenceTrack:neverPresent'};
+
+pool = gcp('nocreate');
+setWorkerWarnings = @(state) cellfun(@(id) warning(state, id), warnIds);
+
+if ~isempty(pool)
+    parfevalOnAll(pool, setWorkerWarnings, 0, 'off');
+end
+setWorkerWarnings('off');   % client session too
+
+result = snrEstimate(detTable, params);
+
+setWorkerWarnings('on');
+if ~isempty(pool)
+    parfevalOnAll(pool, setWorkerWarnings, 0, 'on');
+end
+
 end

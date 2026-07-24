@@ -24,7 +24,7 @@ function qcSnrDiagnosticPlots(detTable, varargin)
 % straight to it instead.
 %
 % B. Miller, AAD, 2026
-
+detTable.datetime = datetime(detTable.t0, 'ConvertFrom', 'datenum');
 p = inputParser;
 addParameter(p,'dateCol','datetime');
 addParameter(p,'widthRatio',4);
