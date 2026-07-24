@@ -95,6 +95,16 @@ end
 t.freq = [t.fLow t.fHigh];  % Frequency vector in Hz
 t.soundFolder =  cellstr(repmat(soundFolder,nDetect,1));             % Location of audio files for this detection
 t.siteCode = cellstr(repmat(siteCode,nDetect,1));                    % Append site to data structure
-t.classification = cellstr(repmat(classification,nDetect,1));        % Append classification to data structure;
+
+if isempty(classification)
+    if any(strcmp('Tags', t.Properties.VariableNames))
+        t.classification = cellstr(string(t.Tags));      % per-row passthrough
+    else
+        t.classification = repmat({'none'}, nDetect, 1); % no Tags column to fall back on
+    end
+else
+    t.classification = cellstr(repmat(classification,nDetect,1));    % explicit value, unchanged behavior
+end
+
 t = sortrows(t,'t0');
 

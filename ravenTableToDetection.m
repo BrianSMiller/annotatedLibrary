@@ -12,8 +12,8 @@ function ravenTable = ravenTableToDetection(ravenFile,soundFolder,siteCode,class
 % a siteCode to identify the recording, optionally link each detection to a
 % soundFolder to facilitate loading acoustic data, and optionally add a
 % classification code.
-if nargin < 4 
-    classification = '';
+if nargin < 4
+    classification = '';   % sentinel: per-row Tags passthrough below if present, else 'none'
 end
 if nargin < 3
     siteCode = '';
@@ -65,7 +65,22 @@ ravenTable.fHigh= ravenTable.HighFreq_Hz_;
 ravenTable.freq = [ravenTable.LowFreq_Hz_ ravenTable.HighFreq_Hz_];  % Frequency vector in Hz
 ravenTable.soundFolder =  cellstr(repmat(soundFolder,nDetect,1));             % Location of audio files for this detection
 ravenTable.siteCode = cellstr(repmat(siteCode,nDetect,1));                    % Append site to data structure
-ravenTable.classification = cellstr(repmat(classification,nDetect,1));        % Append classification to data structure;
 
+% classification: explicit value (unchanged behaviour) if given, otherwise
+% per-row Tags passthrough when a Tags column exists, otherwise 'none'.
+% FIXED 2026-07-24: repmat(classification,nDetect,1) with the default ''
+% stayed 0x0 regardless of nDetect (repmat of an empty array doesn't grow),
+% so cellstr(...) produced a 0-row result -- a row-count mismatch on
+% assignment for ANY nDetect>0 whenever this function was called without
+% an explicit 4th argument (e.g. via matchbox-style 3-arg converter calls).
+if isempty(classification)
+    if any(strcmp('Tags', ravenTable.Properties.VariableNames))
+        ravenTable.classification = cellstr(string(ravenTable.Tags));      % per-row passthrough
+    else
+        ravenTable.classification = repmat({'none'}, nDetect, 1);          % no Tags column to fall back on
+    end
+else
+    ravenTable.classification = cellstr(repmat(classification,nDetect,1)); % explicit value, unchanged behaviour
+end
 
-
+end
