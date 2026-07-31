@@ -78,7 +78,7 @@ while button ~= 27
                 startTime = c.t0(ix)   - sp.pre/86400;
                 endTime   = c.tEnd(ix) + sp.post/86400;
         end
-
+        try
         wav = getAudioFromFiles(wavInfo, startTime, endTime, channel=1, newRate=sp.sampleRate);
         [~,f,t,p] = spectrogram(wav, sp.nfft, sp.noverlap, sp.nfft, sp.sampleRate, 'yAxis');
 
@@ -110,6 +110,10 @@ while button ~= 27
         if ~isempty(infoStr)
             text(0.02,0.95,infoStr,'Units','normalized','Color','w', ...
                 'VerticalAlignment','top','FontSize',8);
+        end
+        catch
+            warnstring = sprintf('')
+ warning('Cannot plot detection index %g)
         end
     end
     pageIx = k:(k+nShown-1);

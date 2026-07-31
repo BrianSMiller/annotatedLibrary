@@ -194,6 +194,7 @@ sgtitle(sprintf('%s -- SNR diagnostics', cfg.name), 'Interpreter','none');
 fprintf('\n--- %s: %d detections to review: Press Esc to continue ---\n', ...
     cfg.name, height(d));
 figure('position',[100, 100, 1280, 720]);
+
 qcPageDetections(d, wavFolder, cfg.spectroParams);
 
 end
