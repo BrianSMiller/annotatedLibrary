@@ -32,6 +32,8 @@ else
    end
 end
 
+parforThreshold = 20e3; % Use parfor if height(t) > this many detections
+
 nDetect = height(t);
 if (nDetect == 0)
     return;
@@ -45,21 +47,21 @@ end
 
 try % First Check soundFolders
     t0 = zeros(height(t),1);
-    % Assume wavFolderInfo has been called correctly and cache exists
-%     if ismember(siteCode,{'Kerguelen2005','Kerguelen2006', ...
-%             'Casey2004', ...
-%             'Prydz2005','Prydz2006'})
-%         wavInfo = xwavFolderInfo(soundFolder);
-%     else
-        wavInfo = wavFolderInfo(soundFolder);
-%     end
+    wavInfo = wavFolderInfo(soundFolder);
     fnames = {wavInfo.fname};
     startDates = [wavInfo.startDate];
     offsets = [t.FileOffset_s_];
     beginFile = t.BeginFile;
-    parfor i = 1:height(t)
-        ix = contains(fnames,beginFile(i));
-        t0(i) = startDates(ix)+offsets(i)/86400;
+    if height(t) > parforThreshold
+        parfor i = 1:height(t)
+            ix = contains(fnames,beginFile(i));
+            t0(i) = startDates(ix)+offsets(i)/86400;
+        end
+    else
+        for i = 1:height(t)
+            ix = contains(fnames,beginFile(i));
+            t0(i) = startDates(ix)+offsets(i)/86400;
+        end
     end
     t.t0 = t0;
 catch
