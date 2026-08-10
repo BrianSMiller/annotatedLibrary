@@ -1,5 +1,5 @@
 function [tab, tableName, tableNum] = ...
-    pamguardIshmaelToDetection(...
+    pamguardIshmaelTableToDetection(...
     databaseFile, databaseTable, soundFolder, siteCode, classification, duration)
 %a = pamguardIshSpectroCorrTableToDetection(databaseFile,soundFolder,
 %       siteCode,classification, duration)
@@ -68,17 +68,22 @@ if nargout == 3
     % Assume the threshold for each detector is embedded in the name of the database
     % tables in Pamguard. For example The table called Ishmael_energy_sum_00001_events
     % should be an Ishmael energy detector module with a threshold of 1.
-    for i = 1:length(tableName)
-        try
-            [intPart, decPart ] = strread(tableName{i},[detectorName '_%d_%d_events']);
-            tableNum(i) = str2num([num2str(intPart) '.' num2str(decPart)]);
-        catch
+    try
+        threshString = extractBetween(tableName,detectorName,'_events');
+        tableNum = str2num(cell2mat(threshString'))
+    catch
+        for i = 1:length(tableName)
             try
-                threshString{i} = strread(tableName{i},[detectorName '_%d_events']);
-                tableNum(i) = threshString{i};
+                [intPart, decPart ] = strread(tableName{i},[detectorName '_%d_%d_events']);
+                tableNum(i) = str2num([num2str(intPart) '.' num2str(decPart)]);
             catch
-                threshString{i} = '';
-                tableNum(i) = nan;
+                try
+                    threshString{i} = strread(tableName{i},[detectorName '_%d_events']);
+                    tableNum(i) = threshString{i};
+                catch
+                    threshString{i} = '';
+                    tableNum(i) = nan;
+                end
             end
         end
     end
