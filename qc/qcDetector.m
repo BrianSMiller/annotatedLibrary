@@ -27,6 +27,12 @@ function d = qcDetector(cfg, useCalibration)
 %            snrType       - passed to qcAttachSnr
 %            nfft          - passed to qcAttachSnr
 %            spectroParams - passed to qcPageDetections
+%            idiRange_s    - OPTIONAL [low high] expected inter-detection
+%                            interval in seconds for this call type, e.g.
+%                            [8 20] for fin 20 Hz, [0.5 2] for sperm whale
+%                            clicks, [60 70] for ABW song. Skipped
+%                            (with a note) if not supplied -- see
+%                            qcInterDetectionIntervalPlot.
 %   useCalibration - if true, attach calibrated SNR using cfg.siteMeta;
 %                    if false, uncalibrated RMS
 %
@@ -189,6 +195,14 @@ sgtitle(sprintf('%s -- valid vs flagged distributions', cfg.name), 'Interpreter'
 %% SNR / NL / RL diagnostics: monthly time series + histogram
 qcSnrDiagnosticPlots(d);
 sgtitle(sprintf('%s -- SNR diagnostics', cfg.name), 'Interpreter','none');
+
+%% Inter-detection interval: species-agnostic pulse/click spacing check
+if isfield(cfg,'idiRange_s') && ~isempty(cfg.idiRange_s)
+    qcInterDetectionIntervalPlot(d, cfg.idiRange_s);
+    sgtitle(sprintf('%s -- inter-detection interval', cfg.name), 'Interpreter','none');
+else
+    fprintf('%s: no cfg.idiRange_s supplied, skipping IDI check\n', cfg.name);
+end
 
 %% Visual review: full detection set
 fprintf('\n--- %s: %d detections to review: Press Esc to continue ---\n', ...
