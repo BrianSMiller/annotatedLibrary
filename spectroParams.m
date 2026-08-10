@@ -17,7 +17,9 @@ switch(lower(type))
         sp.lowFreq = 30;
         sp.highFreq = 125;
 
-        case {'blue','abw','pbw','fin','fin20','bp-20','bm_ant-abz'}
+        case {'blue','abw','bm_ant-abz','pbw',...
+                'fin','fin20','bp-20','bp20','bp_20','bp20plus','bp-20plus'
+                }
         sp.nrow = 4; % Number of rows per page
         sp.ncol = 4; % Number of columns per page
 

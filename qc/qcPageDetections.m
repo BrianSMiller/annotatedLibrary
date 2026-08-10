@@ -112,8 +112,8 @@ while button ~= 27
                 'VerticalAlignment','top','FontSize',8);
         end
         catch
-            warnstring = sprintf('')
- warning('Cannot plot detection index %g)
+            warnstring = sprintf('Cannot plot detection %g',ix);
+ warning('qcPageDetections:BadPlot',warnstring)
         end
     end
     pageIx = k:(k+nShown-1);
