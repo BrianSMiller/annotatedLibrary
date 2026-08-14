@@ -204,13 +204,13 @@ if ~isempty(validRows)
         validRows.originalT0    = trueOriginalT0;
         validRows.originalTEnd  = trueOriginalTEnd;
         validRows.originalFreq  = trueOriginalFreq;
-        % Keep fLow/fHigh in sync with the new freq -- qcSummaryReport
-        % and others read these directly, not derived from freq.
+        % fLow/fHigh kept in sync with the new freq via syncFreqBounds
+        % (annotatedLibrary) -- the same shared contract qcAttachSnr,
+        % snrEstimateImpl, and matchbox's multiCaptureHistory* all use.
         if all(ismember({'fLow','fHigh'}, validRows.Properties.VariableNames))
             validRows.originalFLow = validRows.fLow;   % true original, before overwrite
             validRows.originalFHigh = validRows.fHigh;
-            validRows.fLow  = snrResult.freq(:,1);
-            validRows.fHigh = snrResult.freq(:,2);
+            validRows = syncFreqBounds(validRows, 'freq');
         end
     end
 else
