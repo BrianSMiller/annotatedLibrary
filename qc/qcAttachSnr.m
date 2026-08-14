@@ -137,12 +137,15 @@ if all(ismember({'t0','tEnd','freq','boundsRefined'}, result.Properties.Variable
     detTable.tEnd           = result.tEnd;
     detTable.freq           = result.freq;
     detTable.boundsRefined  = result.boundsRefined;
-    % Keep fLow/fHigh columns (if present) in sync with the new freq --
-    % several QC functions (qcSummaryReport in particular) read fLow/
-    % fHigh directly rather than deriving them from freq at read-time.
+    % fLow/fHigh kept in sync with the new freq via syncFreqBounds
+    % (annotatedLibrary) rather than a hand-rolled derivation -- the same
+    % shared fLow/fHigh<->freq contract snrEstimateImpl and matchbox's
+    % multiCaptureHistory* now use. Only touches fLow/fHigh if they
+    % already exist on detTable (several QC functions, qcSummaryReport
+    % in particular, read them directly rather than deriving from freq
+    % at read-time).
     if all(ismember({'fLow','fHigh'}, detTable.Properties.VariableNames))
-        detTable.fLow  = result.freq(:,1);
-        detTable.fHigh = result.freq(:,2);
+        detTable = syncFreqBounds(detTable, 'freq');
     end
     nRefined = sum(result.boundsRefined);
     fprintf('qcAttachSnr: %d of %d rows got refined bounds (snrType=''%s'')\n', ...
