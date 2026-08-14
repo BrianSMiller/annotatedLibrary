@@ -110,6 +110,13 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %                 and can be adjusted interactively with the arrow keys.
 %                 Default: [5 99]
 %
+%   soundFolder - Explicit path to the folder of wav files, overriding
+%                 whatever the capture history table would otherwise
+%                 resolve to. Use this when you want to bypass table-based
+%                 resolution entirely. See NOTES for the full resolution
+%                 order.
+%                 Default: [] (resolve from c; see NOTES)
+%
 %   showObsBoxes - If true, overlay coloured bounding boxes for each
 %                  observer's detection on the spectrogram. Each observer
 %                  is assigned a distinct colour; the observer number is
@@ -169,6 +176,19 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %     immediately after a session ends.
 %   - Audio is loaded using getAudioFromFiles, which must be
 %     on the MATLAB path.
+%   - soundFolder is resolved ONCE per session, before the review loop,
+%     and reused for every row. c is assumed to be a single-deployment
+%     table. Resolution order:
+%       1. options.soundFolder, if given.
+%       2. c.soundFolder, if the table has a top-level column (e.g. from
+%          resolveObserverColumns).
+%       3. First non-empty soundFolder_observerK across all rows and all
+%          observers (legacy fallback for tables predating
+%          resolveObserverColumns).
+%     Errors immediately, before opening a figure, if none resolve, or if
+%     c.soundFolder (step 2) holds more than one distinct value -- a
+%     mixed-deployment table needs to be split before review, since only
+%     one soundFolder is ever loaded.
 %
 % -------------------------------------------------------------------------
 %   EXAMPLES
@@ -221,6 +241,7 @@ arguments
         {mustBeMember(options.windowType,{'prePost','fixed','tight'})} = 'prePost'
     options.windowDur   (1,1) {mustBeNumeric, mustBePositive} = 60
     options.cAdjust     (1,2) {mustBeNumeric}                 = [5 99]
+    options.soundFolder  {mustBeText}                         = ''
     options.showObsBoxes (1,1) logical                        = true
     options.cmPerPixel  (1,1) {mustBeNumeric, mustBePositive} = 0.05
     options.figPos      (1,4) {mustBeNumeric}                 = [100 400 679 400]
@@ -245,7 +266,8 @@ if ~any(strcmp('judged',fieldnames(c)))
 end
 
 nDet = height(c);
-wavInfo = wavFolderInfo(c.soundFolder_observer1{1});
+soundFolder = resolveSoundFolder(c, options.soundFolder);
+wavInfo = wavFolderInfo(soundFolder);
 
 figure('position',pos);
 colormap(flipud(gray));
@@ -410,4 +432,54 @@ while (i <= nDet)
         fprintf('Exiting on index %g\n',i);
         return
     end
+end
+end
+
+function soundFolder = resolveSoundFolder(c, override)
+% resolveSoundFolder  Priority-ordered soundFolder resolution for
+% judgeDetections. See judgeDetections' NOTES section for the resolution
+% order this implements. Errors immediately (before any figure is opened)
+% rather than letting wavFolderInfo fail on an empty/ambiguous path.
+
+% 1. Explicit override always wins.
+if ~isempty(override)
+    soundFolder = char(override);
+    return
+end
+
+% 2. Resolved top-level column (e.g. from resolveObserverColumns).
+if any(strcmp('soundFolder', c.Properties.VariableNames))
+    vals = c.soundFolder;
+    nonEmpty = vals(~cellfun(@isempty, vals));
+    if isempty(nonEmpty)
+        error('judgeDetections:emptySoundFolderColumn', ...
+            'c.soundFolder exists but every entry is empty.');
+    end
+    uVals = unique(nonEmpty);
+    if numel(uVals) > 1
+        error('judgeDetections:mixedSoundFolder', ...
+            ['c.soundFolder has %d distinct values. judgeDetections loads audio ' ...
+             'from ONE folder for the whole session -- split this table by ' ...
+             'deployment first, or pass ''soundFolder'' explicitly.'], numel(uVals));
+    end
+    soundFolder = uVals{1};
+    return
+end
+
+% 3. Legacy fallback: first non-empty value across all soundFolder_observerK
+%    columns and all rows (not just observer1, row1).
+obsCols = c.Properties.VariableNames(startsWith(c.Properties.VariableNames, 'soundFolder_observer'));
+for k = 1:numel(obsCols)
+    vals = c.(obsCols{k});
+    nonEmpty = vals(~cellfun(@isempty, vals));
+    if ~isempty(nonEmpty)
+        soundFolder = nonEmpty{1};
+        return
+    end
+end
+
+% 4. Nothing resolved -- fail loud, before opening a figure.
+error('judgeDetections:noSoundFolder', ...
+    ['Could not resolve a soundFolder from c. Pass ''soundFolder'' explicitly, ' ...
+     'or run resolveObserverColumns(c, {''soundFolder''}) first.']);
 end

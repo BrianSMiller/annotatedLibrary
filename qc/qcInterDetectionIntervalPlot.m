@@ -141,14 +141,13 @@ stats.idiBinCentres = idiBinCentres;
 stats.idiGram       = idiGram;
 
 %% Plot
-figure;
 tl = tiledlayout(1,4,'TileSpacing','compact');
 
 hIdiGram = nexttile([1 3]);
 tbNum = datenum(timeEdges(1:end-1)); %#ok<DATNM> -- imagesc needs numeric XData
 hpcol = pcolor(tbNum, idiBinCentres, idiGram);
 set(hpcol,'LineStyle','none')
-set(gca,'YDir','normal','YScale','log');
+set(gca,'YDir','normal','YScale','log','ColorScale','log');
 datetick('x','keeplimits');
 yt = get(gca,'YTick');
 % set(gca,'YTickLabel', compose('%.2g', 10.^yt));
