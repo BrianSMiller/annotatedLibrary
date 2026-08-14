@@ -51,7 +51,8 @@ for i = 1:length(tableName)
     tab{i}.soundFolder =  cellstr(repmat(soundFolder,nDetect,1)); % Location of audio files for this detection
     tab{i}.siteCode = cellstr(repmat(siteCode,nDetect,1));        % Append site to data structure
     tab{i}.classification = repmat({classification},nDetect,1);   % Append classification to data structure;
-
+    tab{i}.channel = decodePamguardChannelMap(tab{i}.channelMap);
+    
     % For Pamguard's Ishmael spectrogram correlation detector, the duration
     % is actually that of the kernel, not the amount of time above
     % threshold
