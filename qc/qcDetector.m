@@ -1,4 +1,4 @@
-function d = qcDetector(cfg, useCalibration)
+function d = qcDetector(cfg, useCalibration, createCache, overwrite)
 % qcDetector  Run the full QC pipeline for a single detector config,
 % single site: load+convert -> validate -> attach SNR (valid rows only)
 % -> diagnostic plots -> full-set visual paging.
@@ -9,11 +9,14 @@ function d = qcDetector(cfg, useCalibration)
 % hypothetical future sites isn't worth it yet. When a detector actually
 % covers multiple sites, extend this then, with real requirements in hand.
 %
-%   d = qcDetector(cfg, useCalibration)
+%   d = qcDetector(cfg, useCalibration, createCache, overwrite)
 %
 % Inputs
 %   cfg  - struct with fields:
-%            name          - detector label, e.g. 'Coni_LFDCS_Dcall'
+%            name          - detector label, e.g. 'Coni_LFDCS_Dcall'.
+%                            ALSO used as the cache key (data/qc/
+%                            <cfg.name>.mat) -- must stay unique across
+%                            every call site.
 %            folder        - folder containing the detection file
 %            filePattern   - exact filename to load
 %            converter     - function handle, e.g. @lfdcsTableToDetection
@@ -35,6 +38,15 @@ function d = qcDetector(cfg, useCalibration)
 %                            qcInterDetectionIntervalPlot.
 %   useCalibration - if true, attach calibrated SNR using cfg.siteMeta;
 %                    if false, uncalibrated RMS
+%   createCache - if true (default), check data/qc/<cfg.name>.mat before
+%                 doing any work and load from it if present (subject to
+%                 overwrite below); after a fresh run, save the result
+%                 there. If false, caching is skipped entirely in both
+%                 directions -- useful for one-off debugging without
+%                 touching data/qc/.
+%   overwrite   - if true, ignore any existing cache file and force a
+%                 fresh run, overwriting the cache afterward. Default
+%                 false. Has no effect if createCache is false.
 %
 % Output
 %   d  - full detection table (valid + flagged rows), post-SNR-attach,
@@ -44,7 +56,50 @@ function d = qcDetector(cfg, useCalibration)
 %        originalFreq/boundsRefined for the detector's TRUE original
 %        bounds and whether refinement actually happened.
 %
+% CACHING (2026-08-06, delegated to bsmUtils/cacheOrCompute as of
+% 2026-08-14): reads/writes data/qc/<cfg.name>.mat via cacheOrCompute --
+% see that function for the load/warn/save mechanics (cache hit warns
+% rather than silently returning, no staleness check against the
+% underlying detection file). This is still a real behaviour change for
+% every existing caller, not just new ones -- a script that used to
+% always recompute will now load a stale-looking instant result on a
+% rerun, which is the point, but worth knowing the first time it
+% happens.
+%
+% NOTE: the cache-hit warning identifier changed from
+% qcDetector:loadedFromCache to cacheOrCompute:loadedFromCache as part
+% of this refactor, and the fprintf save message changed from
+% "qcDetector: saving ..." to "cacheOrCompute: saving ...". If anything
+% downstream matches on either by exact string/ID (warning('off', ...),
+% a try/catch on identifier, log scraping), it needs updating.
+%
+% MERGE NOTE (2026-08-14): the version of this file recovered after the
+% accidental deletion had caching but was missing the inter-detection-
+% interval check (idiRange_s / qcInterDetectionIntervalPlot) present in
+% the stale committed version -- the two had diverged and never been
+% reconciled. Both are present below; if any other divergence turns up,
+% flag it rather than assuming this merge caught everything.
+%
 % B. Miller, AAD, 2026
+
+if nargin < 4 || isempty(overwrite)
+    overwrite = false;
+end
+if nargin < 3 || isempty(createCache)
+    createCache = true;
+end
+
+cacheFile = fullfile('data', 'qc', [cfg.name '.mat']);
+
+d = cacheOrCompute(cacheFile, @() runQcDetector(cfg, useCalibration), ...
+    'createCache', createCache, 'overwrite', overwrite, 'varName', 'd');
+
+end
+
+function d = runQcDetector(cfg, useCalibration)
+% runQcDetector  The actual QC compute body, unchanged from qcDetector.m
+% prior to the cacheOrCompute refactor -- extracted verbatim so caching
+% and computation are two separate concerns instead of interleaved.
 
 fprintf('\n=== QC: %s ===\n', cfg.name);
 
