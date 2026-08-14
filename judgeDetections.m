@@ -22,7 +22,9 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 % -------------------------------------------------------------------------
 %   c           - Detection table (captureHistoryTable). Must contain fields:
 %                   t0, tEnd, detect_observer*, t0_observer*, tEnd_observer*,
-%                   freq_observer*_1, freq_observer*_2, soundFolder_observer1
+%                   soundFolder_observer1 (or soundFolder; see NOTES).
+%                 For showObsBoxes, also needs per-observer frequency bounds
+%                 under one of the naming conventions in NOTES.
 %                 On return, c will contain two additional fields:
 %                   verdict  - 1 = true positive, 0 = false positive, NaN = unjudged
 %                   judged   - logical flag, true if verdict has been assigned
@@ -189,6 +191,11 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %     c.soundFolder (step 2) holds more than one distinct value -- a
 %     mixed-deployment table needs to be split before review, since only
 %     one soundFolder is ever loaded.
+%   - Per-observer frequency bounds for showObsBoxes are resolved once,
+%     before the review loop, checking (in order): fHigh_observerK /
+%     fLow_observerK (current matchbox convention), freq_observerK_1/_2
+%     (2026-03-18), freq_1_observerK/freq_2_observerK (2025-10-31). Errors
+%     immediately if none match.
 %
 % -------------------------------------------------------------------------
 %   EXAMPLES
@@ -269,6 +276,11 @@ nDet = height(c);
 soundFolder = resolveSoundFolder(c, options.soundFolder);
 wavInfo = wavFolderInfo(soundFolder);
 
+nObservers = sum(cellfun(@isempty,...
+    strfind(c.Properties.VariableNames,'detect_observer') ...
+    )==0);
+[topFreqCols, botFreqCols] = resolveObserverFreqColumns(c, nObservers);
+
 figure('position',pos);
 colormap(flipud(gray));
 set(gcf,'units','centimeters');
@@ -287,9 +299,7 @@ while (i <= nDet)
             end
         end % keep existing verdicts
 
-        nObservers = sum(cellfun(@isempty,...
-            strfind(c.Properties.VariableNames,'detect_observer') ...
-            )==0);
+        % nObservers resolved once, before the loop (see above)
 
 
         % calculate audio times
@@ -350,13 +360,8 @@ while (i <= nDet)
         if showObsBoxes
             l = c{i,append("t0_observer",string(1:nObservers))}-startTime;
             r = c{i,append("tEnd_observer",string(1:nObservers))}-startTime;
-            try % Format as of 2026-03-18
-                top = c{i,append("freq_observer",string(1:nObservers),'_1')};
-                bot = c{i,append("freq_observer",string(1:nObservers),'_2')};
-            catch % Format from 2025-10-31
-                top = c{i,append("freq_1_observer",string(1:nObservers))};
-                bot = c{i,append("freq_2_observer",string(1:nObservers))};
-            end
+            top = c{i, topFreqCols};
+            bot = c{i, botFreqCols};
             ho = ishold;
             hold on;
             obsColors = lines(nObservers);
@@ -482,4 +487,39 @@ end
 error('judgeDetections:noSoundFolder', ...
     ['Could not resolve a soundFolder from c. Pass ''soundFolder'' explicitly, ' ...
      'or run resolveObserverColumns(c, {''soundFolder''}) first.']);
+end
+
+function [topCols, botCols] = resolveObserverFreqColumns(c, nObservers)
+% resolveObserverFreqColumns  Find the per-observer high/low frequency
+% column names actually present in c, across the naming conventions
+% matchbox and judgeDetections have used over time. Checked ONCE before
+% the review loop starts, rather than guessed per-detection via try/catch.
+
+vn = c.Properties.VariableNames;
+
+% Current matchbox convention (fLow/fHigh -- see multiCaptureHistory*.m)
+topA = append("fHigh_observer", string(1:nObservers));
+botA = append("fLow_observer",  string(1:nObservers));
+if all(ismember(topA, vn)) && all(ismember(botA, vn))
+    topCols = topA; botCols = botA; return
+end
+
+% Format as of 2026-03-18
+topB = append("freq_observer", string(1:nObservers), '_1');
+botB = append("freq_observer", string(1:nObservers), '_2');
+if all(ismember(topB, vn)) && all(ismember(botB, vn))
+    topCols = topB; botCols = botB; return
+end
+
+% Format from 2025-10-31
+topC = append("freq_1_observer", string(1:nObservers));
+botC = append("freq_2_observer", string(1:nObservers));
+if all(ismember(topC, vn)) && all(ismember(botC, vn))
+    topCols = topC; botCols = botC; return
+end
+
+error('judgeDetections:noFreqColumns', ...
+    ['Could not find per-observer high/low frequency columns under any known ' ...
+     'naming convention (fHigh_observerK/fLow_observerK, freq_observerK_1/_2, ' ...
+     'or freq_1_observerK/freq_2_observerK). Check c.Properties.VariableNames.']);
 end
