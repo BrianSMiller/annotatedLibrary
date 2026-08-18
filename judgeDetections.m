@@ -125,6 +125,34 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %                  labelled at the top-left corner of each box.
 %                  Default: true
 %
+%   showRefinedBounds - If true, overlay a magenta box using c's
+%                  top-level t0/tEnd/fLow/fHigh -- whatever bounds are
+%                  CURRENTLY primary for each detection (refined in
+%                  place if a bounds-refining SNR method like kalmanRidge
+%                  genuinely tracked a call). If c has a boundsRefined
+%                  column and it's false for a row (dropout -- t0/tEnd/
+%                  freq pass through the ORIGINAL bounds unchanged per
+%                  bsnr's contract), the box is skipped and an explicit
+%                  "DROPOUT" flag is shown instead, since drawing a
+%                  "refined" box there would land exactly on top of the
+%                  original-bounds box and look like a rendering bug, not
+%                  the real underlying signal. If boundsRefined isn't
+%                  present at all, always draws the box (no way to tell
+%                  refined from pass-through in that case).
+%                  Requires top-level fLow/fHigh columns; if absent,
+%                  disabled with a one-time console note rather than
+%                  erroring per detection.
+%                  Default: true
+%
+%   showOriginalBounds - If true, overlay a white dashed box using
+%                  c.originalT0/originalTEnd/originalFLow/originalFHigh
+%                  -- the detector's bounds BEFORE any refinement. Always
+%                  drawn when available, regardless of dropout status.
+%                  Requires all four columns; if absent (e.g. c never
+%                  went through a bounds-refining SNR step), disabled
+%                  with a one-time console note.
+%                  Default: true
+%
 %   cmPerPixel  - Width of each spectrogram time-bin in centimetres on
 %                 screen. Controls how wide the figure window is drawn.
 %                 Increase for more detail; decrease to fit more time on
@@ -196,6 +224,20 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %     fLow_observerK (current matchbox convention), freq_observerK_1/_2
 %     (2026-03-18), freq_1_observerK/freq_2_observerK (2025-10-31). Errors
 %     immediately if none match.
+%   - showRefinedBounds/showOriginalBounds availability is checked once,
+%     before the review loop, not per detection. If required columns are
+%     missing, the option is silently disabled with a one-time console
+%     note rather than erroring on the first detection. showRefinedBounds
+%     needs top-level t0/tEnd/fLow/fHigh; showOriginalBounds needs
+%     originalT0/originalTEnd/originalFLow/originalFHigh, which only
+%     exist if c went through a bounds-refining SNR step (e.g. qcAttachSnr
+%     with snrType='kalmanRidge' or 'momentumRidge'). If c also has a
+%     boundsRefined column, showRefinedBounds uses it PER ROW: a false
+%     value (dropout) shows an orange "DROPOUT" flag instead of a box,
+%     rather than drawing a refined box that would coincide exactly with
+%     the original-bounds box and look broken. Without a boundsRefined
+%     column, the refined box is always drawn (no way to distinguish
+%     genuine refinement from pass-through in that case).
 %
 % -------------------------------------------------------------------------
 %   EXAMPLES
@@ -250,6 +292,8 @@ arguments
     options.cAdjust     (1,2) {mustBeNumeric}                 = [5 99]
     options.soundFolder  {mustBeText}                         = ''
     options.showObsBoxes (1,1) logical                        = true
+    options.showRefinedBounds  (1,1) logical                  = true
+    options.showOriginalBounds (1,1) logical                  = true
     options.cmPerPixel  (1,1) {mustBeNumeric, mustBePositive} = 0.05
     options.figPos      (1,4) {mustBeNumeric}                 = [100 400 679 400]
 end
@@ -261,6 +305,8 @@ windowType      = options.windowType;
 windowDur       = options.windowDur;
 cAdjust         = options.cAdjust;
 showObsBoxes    = options.showObsBoxes;
+showRefinedBounds  = options.showRefinedBounds;
+showOriginalBounds = options.showOriginalBounds;
 cmPerPixel      = options.cmPerPixel;
 pos             = options.figPos;
 
@@ -276,10 +322,38 @@ nDet = height(c);
 soundFolder = resolveSoundFolder(c, options.soundFolder);
 wavInfo = wavFolderInfo(soundFolder);
 
-nObservers = sum(cellfun(@isempty,...
-    strfind(c.Properties.VariableNames,'detect_observer') ...
-    )==0);
+% Exact match on detect_observerN only -- a naive substring search
+% (strfind) also catches double-suffixed columns like
+% detect_observer1_observer1, which appear when matchbox is used to
+% match an already-matched CHT against a further detection table (e.g.
+% production output vs ATBFL): matchbox blindly re-suffixes every column
+% of each input, including columns that already carry their own
+% detect_observerK suffix from a prior match. That inflates nObservers
+% (5 instead of 2 in the case that surfaced this) and breaks every
+% downstream lookup that assumes detect_observer1..detect_observerN with
+% no gaps. Anchored regex ('^...$') only matches the genuine, currently-
+% suffixed columns, regardless of how many prior matching passes a
+% column's name has already been through.
+nObservers = sum(~cellfun(@isempty, ...
+    regexp(c.Properties.VariableNames, '^detect_observer\d+$', 'once') ...
+    ));
 [topFreqCols, botFreqCols] = resolveObserverFreqColumns(c, nObservers);
+
+if showRefinedBounds && ~all(ismember({'t0','tEnd','fLow','fHigh'}, c.Properties.VariableNames))
+    fprintf(['judgeDetections: showRefinedBounds requested but c is missing top-level ' ...
+        't0/tEnd/fLow/fHigh -- disabling.\n']);
+    showRefinedBounds = false;
+end
+
+if showOriginalBounds && ~all(ismember( ...
+        {'originalT0','originalTEnd','originalFLow','originalFHigh'}, c.Properties.VariableNames))
+    fprintf(['judgeDetections: showOriginalBounds requested but c is missing ' ...
+        'originalT0/originalTEnd/originalFLow/originalFHigh (only present if c went ' ...
+        'through a bounds-refining SNR step, e.g. qcAttachSnr with kalmanRidge) -- disabling.\n']);
+    showOriginalBounds = false;
+end
+
+hasBoundsRefinedCol = any(strcmp('boundsRefined', c.Properties.VariableNames));
 
 figure('position',pos);
 colormap(flipud(gray));
@@ -353,8 +427,8 @@ while (i <= nDet)
 
         %         caxis([100,200]-200);
         %         ylim([0,0.5]);
-        horzline(freqBand,'c--');
-        vertline([(callStart-startTime)*86400 (callEnd-startTime)*86400],'c--')
+        yline(freqBand,'c--');
+        xline([(callStart-startTime)*86400 (callEnd-startTime)*86400],'c--')
 
 
         if showObsBoxes
@@ -369,6 +443,38 @@ while (i <= nDet)
                 plotBox([l(j),r(j)]*86400,[bot(j),top(j)],obsColors(j,:),'linewidth',1.5);
                 text(l(j)*86400,top(j),num2str(j),'color',obsColors(j,:))
             end
+            if ho==0; hold off; end
+        end
+
+        if showRefinedBounds
+            isDropout = hasBoundsRefinedCol && ~c.boundsRefined(i);
+            ho = ishold;
+            hold on;
+            if isDropout
+                % On dropout, t0/tEnd/freq pass through the ORIGINAL bounds
+                % unchanged (bsnr's documented contract) -- drawing a
+                % "refined" box here would land exactly on top of the
+                % original-bounds box, indistinguishable from it. Flag it
+                % explicitly instead of drawing a coincident, misleading box.
+                text(mean(xlim),min(ylim),'kalmanRidge: DROPOUT (no refinement -- bounds = original)', ...
+                    'color',[1 0.6 0],'FontSize',9,'FontWeight','bold', ...
+                    'VerticalAlignment','bottom','HorizontalAlignment','center','BackgroundColor','k');
+            else
+                l = (c.t0(i) - startTime)*86400;
+                r = (c.tEnd(i) - startTime)*86400;
+                plotBox([l,r],[c.fLow(i),c.fHigh(i)],'m','linewidth',2);
+                text(l,c.fHigh(i),'refined','color','m','FontSize',8);
+            end
+            if ho==0; hold off; end
+        end
+
+        if showOriginalBounds
+            ho = ishold;
+            hold on;
+            l = (c.originalT0(i) - startTime)*86400;
+            r = (c.originalTEnd(i) - startTime)*86400;
+            plotBox([l,r],[c.originalFLow(i),c.originalFHigh(i)],'w','linewidth',1,'linestyle','--');
+            text(l,c.originalFHigh(i),'orig','color','w','FontSize',8);
             if ho==0; hold off; end
         end
 
