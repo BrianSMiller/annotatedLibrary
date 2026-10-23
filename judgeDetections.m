@@ -168,6 +168,14 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %                  with a one-time console note.
 %                  Default: true
 %
+%   showChannels - Channels to show stacked, one panel each: [] (default)
+%                  shows only the detection's own channel; a vector (e.g.
+%                  [1 2 3]) or 'all' stacks those channels. The detection's
+%                  boxes are drawn on its own channel; other detections of c
+%                  in the window are drawn dashed on their channels (e.g.
+%                  the same call on other sonobuoys).
+%                  Default: []
+%
 %   cmPerPixel  - Width of each spectrogram time-bin in centimetres on
 %                 screen. Controls how wide the figure window is drawn.
 %                 Increase for more detail; decrease to fit more time on
@@ -325,6 +333,7 @@ arguments
     options.showOriginalBounds (1,1) logical                  = true
     options.cmPerPixel  (1,1) {mustBeNumeric, mustBePositive} = 0.05
     options.figPos      (1,4) {mustBeNumeric}                 = [100 400 679 400]
+    options.showChannels                                      = []
 end
 
 % Unpack options into local variables for readability
@@ -338,6 +347,7 @@ showRefinedBounds  = options.showRefinedBounds;
 showOriginalBounds = options.showOriginalBounds;
 cmPerPixel      = options.cmPerPixel;
 pos             = options.figPos;
+showChannels    = options.showChannels;
 
 %% Create verdict and judged columns unless they already exist
 if ~any(strcmp('verdict',fieldnames(c)))
@@ -445,39 +455,62 @@ while (i <= nDet)
                 startTime = callStart;
                 endTime = callEnd;
         end
-        wav =  getAudioFromFiles(wavInfo,startTime,endTime,newRate=sampleRate, ...
-            channel=channelFor(c, i, hasChannelCol));
-
-        % Remove clicks
-        if ~isempty(options.suppressClickThreshold)
-            threshold = options.suppressClickThreshold;
-            power = 1000;
-            if ~isempty(options.suppressClickPower)
-                power = options.suppressClickPower;
-            end
-            wav = removeClicks(wav,threshold,power);
+        % Channels to show: this detection's own, or several stacked
+        thisChannel = channelFor(c, i, hasChannelCol);
+        if isempty(showChannels)
+            chans = thisChannel;
+        elseif ischar(showChannels) || isstring(showChannels)   % 'all'
+            chans = 1:wavInfo(1).numberOfChannels;
+        else
+            chans = showChannels(:)';
         end
+        stacked = numel(chans) > 1;
+        if stacked
+            clf;
+            tl = tiledlayout(numel(chans), 1, 'TileSpacing', 'compact', 'Padding', 'compact');
+        end
+        mainAx = [];
+        for k = 1:numel(chans)
+            wavK = getAudioFromFiles(wavInfo,startTime,endTime,newRate=sampleRate, ...
+                channel=chans(k));
 
+            % Remove clicks
+            if ~isempty(options.suppressClickThreshold)
+                threshold = options.suppressClickThreshold;
+                power = 1000;
+                if ~isempty(options.suppressClickPower)
+                    power = options.suppressClickPower;
+                end
+                wavK = removeClicks(wavK,threshold,power);
+            end
 
+            if stacked, ax = nexttile(tl); else, ax = gca; end
+            [s,f,t,p] = spectrogram(wavK,nfft,noverlap,[],sampleRate,'yAxis');
 
-        [s,f,t,p] = spectrogram(wav,nfft,noverlap,[],sampleRate,'yAxis');
+            pdB = 20*log10(p);
+            fIx = double(f > freqBand(1) & f < freqBand(2));
+            nanIx = find(fIx==0);
+            fIx(nanIx)=nan(size(nanIx));
+            pIx = repmat(fIx,1,length(t));
+            h = pcolor(ax,t,f,pdB);
+            set(h,'lineStyle','none');
+            clim(1) = prctile(pdB(:).*pIx(:),cAdjust(1));
+            clim(2) = prctile(pdB(:).*pIx(:),cAdjust(2));
+            set(ax,'clim',clim);
 
-        pdB = 20*log10(p);
-        fIx = double(f > freqBand(1) & f < freqBand(2));
-        nanIx = find(fIx==0);
-        fIx(nanIx)=nan(size(nanIx));
-        pIx = repmat(fIx,1,length(t));
-        %         h = pcolor(t,f,pdB.*pIx);
-        h = pcolor(t,f,pdB);
-
-        set(h,'lineStyle','none');
-        %         view([0,90]);
-        %         clim(1) = min(pdB(:).*pIx(:));
-        clim(1) = prctile(pdB(:).*pIx(:),cAdjust(1));
-        %         clim(2) = max(pdB(:).*pIx(:));
-        clim(2) = prctile(pdB(:).*pIx(:),cAdjust(2));
-
-        set(gca,'clim',clim);
+            if chans(k) == thisChannel || (k == numel(chans) && isempty(mainAx))
+                mainAx = ax;
+                wav = wavK;   % played by P
+            end
+            if stacked
+                colormap(ax, flipud(gray));
+                ylabel(ax, sprintf('Ch %d', chans(k)));
+                if chans(k) ~= thisChannel
+                    otherBoxes(ax, c, i, chans(k), startTime, endTime, hasChannelCol);
+                end
+            end
+        end
+        axes(mainAx);
 
         %         caxis([100,200]-200);
         %         ylim([0,0.5]);
@@ -616,6 +649,24 @@ while (i <= nDet)
         return
     end
 end
+end
+
+function otherBoxes(ax, c, i, channel, startTime, endTime, hasChannelCol)
+% Dashed boxes for the other detections of c on this channel within the
+% window (e.g. the same call on another sonobuoy), so stacked channels can
+% be compared.
+if ~hasChannelCol || ~all(ismember({'t0','tEnd','fLow','fHigh'}, c.Properties.VariableNames))
+    return
+end
+rows = find(c.channel == channel & c.t0 < endTime & c.tEnd > startTime);
+rows(rows == i) = [];
+ho = ishold(ax);
+hold(ax, 'on');
+for r = rows'
+    plot(ax, ([c.t0(r) c.t0(r) c.tEnd(r) c.tEnd(r) c.t0(r)] - startTime)*86400, ...
+        [c.fLow(r) c.fHigh(r) c.fHigh(r) c.fLow(r) c.fLow(r)], 'w--', 'LineWidth', 1);
+end
+if ~ho, hold(ax, 'off'); end
 end
 
 function ch = channelFor(c, i, hasChannelCol)
