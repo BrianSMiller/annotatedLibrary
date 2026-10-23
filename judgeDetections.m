@@ -94,6 +94,21 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %                     Default: false
 %
 % -------------------------------------------------------------------------
+%   OPTIONAL NAME-VALUE INPUTS — Reasons
+% -------------------------------------------------------------------------
+%   reasons     - Extra keys that record a verdict together with a reason,
+%                 as an N-by-3 cell array {key, verdict, label}. key is a
+%                 single character not already used (i, p, s, -), verdict
+%                 is the value written to c.verdict, and label is written
+%                 to c.verdictReason. Clicks leave verdictReason empty.
+%                 c.verdictReason is created when reasons are given.
+%                 Default: {} (no reason keys)
+%
+%                   Example: reject with a reason
+%                       judgeDetections(c, 500, 64, 58, 'reasons', ...
+%                           {'h', 0, 'too high'; 'n', 0, 'noise'})
+%
+% -------------------------------------------------------------------------
 %   OPTIONAL NAME-VALUE INPUTS — Visualisation
 % -------------------------------------------------------------------------
 %   windowType  - How to determine the audio window around each detection:
@@ -180,6 +195,9 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %                         Press repeatedly to go further back. After the
 %                         correction, review resumes at the first unjudged
 %                         detection.
+%
+%     Reason keys         Keys given in the reasons option record their
+%                         verdict and label, and advance.
 %
 %   AUDIO
 %     P                   Play the audio clip for the current detection window.
@@ -292,6 +310,8 @@ arguments
     % Program flow
     options.showJudged      (1,1) logical = false
     options.overwriteJudged (1,1) logical = false
+    % Reasons
+    options.reasons cell = {}
     % Visualisation
     options.windowType  (1,1) string ...
         {mustBeMember(options.windowType,{'prePost','fixed','tight'})} = 'prePost'
@@ -324,6 +344,26 @@ end
 if ~any(strcmp('judged',fieldnames(c)))
     c.judged = false(size(c.verdict));
 end
+
+reasons = options.reasons;
+if ~isempty(reasons)
+    if size(reasons, 2) ~= 3 || ~all(cellfun(@(k) ischar(k) && isscalar(k), reasons(:, 1)))
+        error('judgeDetections:badReasons', ...
+            'reasons must be an N-by-3 cell array {key, verdict, label} with single-character keys.');
+    end
+    reasonCodes = cellfun(@double, reasons(:, 1));
+    clash = intersect(reasonCodes, double('ips-'));
+    if ~isempty(clash)
+        error('judgeDetections:reasonKeyInUse', ...
+            'Reason key ''%s'' is already used by judgeDetections.', char(clash(1)));
+    end
+    if ~any(strcmp('verdictReason', c.Properties.VariableNames))
+        c.verdictReason = repmat({''}, height(c), 1);
+    end
+else
+    reasonCodes = NaN;   % matches no key
+end
+hasReasonCol = any(strcmp('verdictReason', c.Properties.VariableNames));
 
 nDet = height(c);
 soundFolder = resolveSoundFolder(c, options.soundFolder);
@@ -373,10 +413,10 @@ while (i <= nDet)
     msg = '';
     try
         if i == revisit
-            msg = sprintf('Correcting: judged as %g. Click to replace.', c.verdict(i));
+            msg = sprintf('Correcting: judged as %s. Click to replace.', verdictText(c, i, hasReasonCol));
         elseif c.judged(i)==true && ~isnan(c.verdict(i))
             if showJudged
-                msg = sprintf('Already judged as %g', c.verdict(i));
+                msg = sprintf('Already judged as %s', verdictText(c, i, hasReasonCol));
             else
                 i = i+increment; % Uncomment to skip already judged
                 continue
@@ -515,6 +555,7 @@ while (i <= nDet)
                 if c.judged(i)~=true || overwriteJudged || i == revisit
                     c.verdict(i) = 1;
                     c.judged(i)=true;
+                    if hasReasonCol, c.verdictReason{i} = ''; end
                 end
                 revisit = 0;
                 i = i + increment;
@@ -523,6 +564,7 @@ while (i <= nDet)
                 if c.judged(i)~=true || overwriteJudged || i == revisit
                     c.verdict(i) = 0;
                     c.judged(i)=true;
+                    if hasReasonCol, c.verdictReason{i} = ''; end
                 end
                 revisit = 0;
                 i = i + increment;
@@ -531,6 +573,16 @@ while (i <= nDet)
                 if c.judged(i)~=true || overwriteJudged || i == revisit
                     c.verdict(i) = -1;
                     c.judged(i)=true;
+                    if hasReasonCol, c.verdictReason{i} = ''; end
+                end
+                revisit = 0;
+                i = i + increment;
+            case num2cell(reasonCodes) % reason keys: verdict plus label
+                if c.judged(i)~=true || overwriteJudged || i == revisit
+                    r = find(reasonCodes == button, 1);
+                    c.verdict(i) = reasons{r, 2};
+                    c.judged(i) = true;
+                    c.verdictReason{i} = reasons{r, 3};
                 end
                 revisit = 0;
                 i = i + increment;
@@ -559,6 +611,14 @@ while (i <= nDet)
         fprintf('Exiting on index %g\n',i);
         return
     end
+end
+end
+
+function txt = verdictText(c, i, hasReasonCol)
+% Verdict for the banner, with its reason when there is one.
+txt = sprintf('%g', c.verdict(i));
+if hasReasonCol && ~isempty(c.verdictReason{i})
+    txt = sprintf('%s (%s)', txt, c.verdictReason{i});
 end
 end
 
