@@ -173,6 +173,13 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %                         and advance to the next detection.
 %     Middle click or -   Mark current detection as OTHER (verdict = -1)
 %                         and advance to the next detection.
+%     Backspace           Go back one detection (by increment) to correct
+%                         it. It is shown even if already judged, with its
+%                         verdict in a banner, and the next click replaces
+%                         that verdict (whatever overwriteJudged says).
+%                         Press repeatedly to go further back. After the
+%                         correction, review resumes at the first unjudged
+%                         detection.
 %
 %   AUDIO
 %     P                   Play the audio clip for the current detection window.
@@ -360,11 +367,14 @@ colormap(flipud(gray));
 set(gcf,'units','centimeters');
 
 i = startIndex;
+revisit = 0;   % index reached with Backspace: shown and overwritable
 while (i <= nDet)
     pos = get(gcf,'pos');
     msg = '';
     try
-        if c.judged(i)==true && ~isnan(c.verdict(i))
+        if i == revisit
+            msg = sprintf('Correcting: judged as %g. Click to replace.', c.verdict(i));
+        elseif c.judged(i)==true && ~isnan(c.verdict(i))
             if showJudged
                 msg = sprintf('Already judged as %g', c.verdict(i));
             else
@@ -502,25 +512,31 @@ while (i <= nDet)
                 cAdjust = cAdjust+[0 -1]; % Down arrow to shift cieling down (darker)
             case 1 % Left click for true positive;
                 % Only write if new verdicts (unless overwrite is true)
-                if c.judged(i)~=true || overwriteJudged
+                if c.judged(i)~=true || overwriteJudged || i == revisit
                     c.verdict(i) = 1;
                     c.judged(i)=true;
                 end
+                revisit = 0;
                 i = i + increment;
             case 3 % Right click for false positive
                 % Only write new verdicts or if overwriteJudged==true)
-                if c.judged(i)~=true || overwriteJudged
+                if c.judged(i)~=true || overwriteJudged || i == revisit
                     c.verdict(i) = 0;
                     c.judged(i)=true;
                 end
+                revisit = 0;
                 i = i + increment;
             case {2,45} % -/Minus-key/Middle click for 'other'
                 % Only write if new verdicts (unless overwrite is true)
-                if c.judged(i)~=true || overwriteJudged
+                if c.judged(i)~=true || overwriteJudged || i == revisit
                     c.verdict(i) = -1;
                     c.judged(i)=true;
                 end
+                revisit = 0;
                 i = i + increment;
+            case 8 % Backspace - go back one detection to correct it
+                i = max(i - increment, 1);
+                revisit = i;
             case 105 % i key - print capture history row in console
                 disp(table2struct(c(i,:)))
             case 112 % p key - Play visible audio
