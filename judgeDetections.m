@@ -230,7 +230,9 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %     trace and exits, returning c as modified up to that point. Save c
 %     immediately after a session ends.
 %   - Audio is loaded using getAudioFromFiles, which must be
-%     on the MATLAB path.
+%     on the MATLAB path. If c has a channel column (1-based, as written by
+%     ravenTableToDetection), each detection is shown on its own channel;
+%     otherwise channel 1.
 %   - soundFolder is resolved ONCE per session, before the review loop,
 %     and reused for every row. c is assumed to be a single-deployment
 %     table. Resolution order:
@@ -401,6 +403,7 @@ if showOriginalBounds && ~all(ismember( ...
 end
 
 hasBoundsRefinedCol = any(strcmp('boundsRefined', c.Properties.VariableNames));
+hasChannelCol = any(strcmp('channel', c.Properties.VariableNames));
 
 figure('position',pos);
 colormap(flipud(gray));
@@ -442,7 +445,8 @@ while (i <= nDet)
                 startTime = callStart;
                 endTime = callEnd;
         end
-        wav =  getAudioFromFiles(wavInfo,startTime,endTime,newRate=sampleRate);
+        wav =  getAudioFromFiles(wavInfo,startTime,endTime,newRate=sampleRate, ...
+            channel=channelFor(c, i, hasChannelCol));
 
         % Remove clicks
         if ~isempty(options.suppressClickThreshold)
@@ -612,6 +616,13 @@ while (i <= nDet)
         return
     end
 end
+end
+
+function ch = channelFor(c, i, hasChannelCol)
+% Channel to show (1-based, as in the detection contract); 1 if c has no
+% channel column.
+ch = 1;
+if hasChannelCol && ~isnan(c.channel(i)), ch = c.channel(i); end
 end
 
 function txt = verdictText(c, i, hasReasonCol)
