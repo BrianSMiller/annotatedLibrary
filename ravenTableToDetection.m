@@ -63,8 +63,8 @@ ravenTable.duration = (ravenTable.tEnd-ravenTable.t0)*86400;          % Duration
 ravenTable.fLow = ravenTable.LowFreq_Hz_;
 ravenTable.fHigh= ravenTable.HighFreq_Hz_;
 ravenTable.freq = [ravenTable.LowFreq_Hz_ ravenTable.HighFreq_Hz_];  % Frequency vector in Hz
-ravenTable.soundFolder =  cellstr(repmat(soundFolder,nDetect,1));             % Location of audio files for this detection
-ravenTable.siteCode = cellstr(repmat(siteCode,nDetect,1));                    % Append site to data structure
+ravenTable.soundFolder = repmat({char(soundFolder)},nDetect,1);              % Location of audio files for this detection
+ravenTable.siteCode = repmat({char(siteCode)},nDetect,1);                     % Append site to data structure
 
 % classification: explicit value (unchanged behaviour) if given, otherwise
 % per-row Tags passthrough when a Tags column exists, otherwise 'none'.
