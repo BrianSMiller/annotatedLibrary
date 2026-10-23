@@ -377,6 +377,14 @@ else
 end
 hasReasonCol = any(strcmp('verdictReason', c.Properties.VariableNames));
 
+% Key guide, shown under the title on every detection
+keyGuide = 'Left click: yes   Right click: no   Middle or -: other';
+for r = 1:size(reasons, 1)
+    keyGuide = sprintf('%s   %s: %s', keyGuide, reasons{r, 1}, reasons{r, 3});
+end
+keyGuide = {keyGuide, ['Backspace: back   Arrows: contrast   ' ...
+    'P: play   I: print row   S: screenshot   Close window: stop']};
+
 nDet = height(c);
 soundFolder = resolveSoundFolder(c, options.soundFolder);
 wavInfo = wavFolderInfo(soundFolder);
@@ -569,7 +577,13 @@ while (i <= nDet)
             1+(i-1)/increment,floor(nDet/increment), cAdjust), ...
             sprintf('(Row % 4g: %s)',i, datestr(c.t0(i)))};
 
-        title(ti);
+        if stacked
+            title(tl, ti);
+            subtitle(tl, keyGuide, 'FontSize', 9, 'Color', [0.3 0.3 0.3]);
+        else
+            title(ti);
+            subtitle(keyGuide, 'FontSize', 9, 'Color', [0.3 0.3 0.3]);
+        end
         text(mean(xlim),max(ylim),msg,'VerticalAlignment','top',...
             'FontSize',14,'FontWeight','bold','HorizontalAlignment','center','BackgroundColor','w');
 
