@@ -112,12 +112,17 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %   OPTIONAL NAME-VALUE INPUTS — Rebox
 % -------------------------------------------------------------------------
 %   rebox       - If true, the R key redraws the box: click two opposite
-%                 corners (drawBox). The new bounds are written to
-%                 c.t0Rebox, c.tEndRebox, c.fLowRebox and c.fHighRebox
-%                 (datenum and Hz; created as NaN if absent), the verdict
-%                 is set to 1, and verdictReason (if present) to 'reboxed'.
-%                 Any other verdict clears the four columns. A redrawn box
-%                 is shown in green when the detection is shown again.
+%                 corners (drawBox). Same convention as bsnr's bounds
+%                 refinement (qcAttachSnr, trimAnnotation): the new bounds
+%                 go in place, in t0, tEnd, fLow, fHigh (and freq and
+%                 duration if present), the bounds before are kept in
+%                 originalT0, originalTEnd, originalFLow, originalFHigh
+%                 (copied once, only if absent, so a real original is
+%                 never overwritten), and a logical column reboxed flags
+%                 the row. The verdict is set to 1, and verdictReason (if
+%                 present) to 'reboxed'. Any other verdict on a reboxed
+%                 row restores the original bounds. A redrawn box is shown
+%                 in green when the detection is shown again.
 %                 R is reserved while rebox is on. Default: false
 %
 %                   Example: fix boxes that miss their call
@@ -400,13 +405,17 @@ end
 hasReasonCol = any(strcmp('verdictReason', c.Properties.VariableNames));
 
 rebox = options.rebox;
-reboxCols = {'t0Rebox', 'tEndRebox', 'fLowRebox', 'fHighRebox'};
 if rebox
-    for v = reboxCols
-        if ~any(strcmp(v{1}, c.Properties.VariableNames))
-            c.(v{1}) = nan(height(c), 1);
-        end
+    vn = c.Properties.VariableNames;
+    if ~all(ismember({'t0','tEnd','fLow','fHigh'}, vn))
+        error('judgeDetections:reboxColumns', 'rebox needs t0, tEnd, fLow and fHigh columns in c.');
     end
+    % Keep the bounds before reboxing, once (as qcAttachSnr does)
+    if ~ismember('originalT0', vn),   c.originalT0   = c.t0;   end
+    if ~ismember('originalTEnd', vn), c.originalTEnd = c.tEnd; end
+    if ~ismember('originalFLow', vn), c.originalFLow = c.fLow; end
+    if ~ismember('originalFHigh', vn), c.originalFHigh = c.fHigh; end
+    if ~ismember('reboxed', vn), c.reboxed = false(height(c), 1); end
 end
 
 % Key guide, shown under the title on every detection
@@ -608,13 +617,13 @@ while (i <= nDet)
             if ho==0; hold off; end
         end
 
-        if rebox && ~isnan(c.t0Rebox(i))
+        if rebox && c.reboxed(i)
             ho = ishold;
             hold on;
-            l = (c.t0Rebox(i) - startTime)*86400;
-            r = (c.tEndRebox(i) - startTime)*86400;
-            plotBox([l,r],[c.fLowRebox(i),c.fHighRebox(i)],'g','linewidth',1.5);
-            text(l,c.fHighRebox(i),'reboxed','color','g','FontSize',8);
+            l = (c.t0(i) - startTime)*86400;
+            r = (c.tEnd(i) - startTime)*86400;
+            plotBox([l,r],[c.fLow(i),c.fHigh(i)],'g','linewidth',1.5);
+            text(l,c.fHigh(i),'reboxed','color','g','FontSize',8);
             if ho==0; hold off; end
         end
 
@@ -652,7 +661,7 @@ while (i <= nDet)
                     c.verdict(i) = 1;
                     c.judged(i)=true;
                     if hasReasonCol, c.verdictReason{i} = ''; end
-                    if rebox, c(i, reboxCols) = {NaN, NaN, NaN, NaN}; end
+                    if rebox, c = setBounds(c, i, false); end
                 end
                 revisit = 0;
                 i = i + increment;
@@ -662,7 +671,7 @@ while (i <= nDet)
                     c.verdict(i) = 0;
                     c.judged(i)=true;
                     if hasReasonCol, c.verdictReason{i} = ''; end
-                    if rebox, c(i, reboxCols) = {NaN, NaN, NaN, NaN}; end
+                    if rebox, c = setBounds(c, i, false); end
                 end
                 revisit = 0;
                 i = i + increment;
@@ -672,7 +681,7 @@ while (i <= nDet)
                     c.verdict(i) = -1;
                     c.judged(i)=true;
                     if hasReasonCol, c.verdictReason{i} = ''; end
-                    if rebox, c(i, reboxCols) = {NaN, NaN, NaN, NaN}; end
+                    if rebox, c = setBounds(c, i, false); end
                 end
                 revisit = 0;
                 i = i + increment;
@@ -682,7 +691,7 @@ while (i <= nDet)
                     c.verdict(i) = reasons{r, 2};
                     c.judged(i) = true;
                     c.verdictReason{i} = reasons{r, 3};
-                    if rebox, c(i, reboxCols) = {NaN, NaN, NaN, NaN}; end
+                    if rebox, c = setBounds(c, i, false); end
                 end
                 revisit = 0;
                 i = i + increment;
@@ -690,10 +699,7 @@ while (i <= nDet)
                 if rebox && (c.judged(i)~=true || overwriteJudged || i == revisit)
                     [tSpan, fSpan] = drawBox(mainAx);
                     if ~isempty(tSpan)
-                        c.t0Rebox(i)   = startTime + tSpan(1)/86400;
-                        c.tEndRebox(i) = startTime + tSpan(2)/86400;
-                        c.fLowRebox(i) = fSpan(1);
-                        c.fHighRebox(i) = fSpan(2);
+                        c = setBounds(c, i, true, startTime + tSpan/86400, fSpan);
                         c.verdict(i) = 1;
                         c.judged(i) = true;
                         if hasReasonCol, c.verdictReason{i} = 'reboxed'; end
@@ -728,6 +734,25 @@ while (i <= nDet)
         return
     end
 end
+end
+
+function c = setBounds(c, i, isReboxed, tSpan, fSpan)
+% Rebox row i in place (isReboxed true, new [t0 tEnd] and [fLow fHigh]),
+% or restore its original bounds (isReboxed false; only if it was reboxed).
+% freq and duration follow, where c has them.
+if isReboxed
+    c.t0(i) = tSpan(1);  c.tEnd(i) = tSpan(2);
+    c.fLow(i) = fSpan(1);  c.fHigh(i) = fSpan(2);
+elseif c.reboxed(i)
+    c.t0(i) = c.originalT0(i);  c.tEnd(i) = c.originalTEnd(i);
+    c.fLow(i) = c.originalFLow(i);  c.fHigh(i) = c.originalFHigh(i);
+else
+    return
+end
+c.reboxed(i) = isReboxed;
+vn = c.Properties.VariableNames;
+if ismember('freq', vn) && size(c.freq, 2) == 2, c.freq(i, :) = [c.fLow(i) c.fHigh(i)]; end
+if ismember('duration', vn), c.duration(i) = (c.tEnd(i) - c.t0(i))*86400; end
 end
 
 function otherBoxes(ax, c, i, channel, startTime, endTime, hasChannelCol)
