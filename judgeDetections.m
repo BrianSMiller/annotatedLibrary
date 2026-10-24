@@ -109,6 +109,21 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %                           {'h', 0, 'too high'; 'n', 0, 'noise'})
 %
 % -------------------------------------------------------------------------
+%   OPTIONAL NAME-VALUE INPUTS — Rebox
+% -------------------------------------------------------------------------
+%   rebox       - If true, the R key redraws the box: click two opposite
+%                 corners (drawBox). The new bounds are written to
+%                 c.t0Rebox, c.tEndRebox, c.fLowRebox and c.fHighRebox
+%                 (datenum and Hz; created as NaN if absent), the verdict
+%                 is set to 1, and verdictReason (if present) to 'reboxed'.
+%                 Any other verdict clears the four columns. A redrawn box
+%                 is shown in green when the detection is shown again.
+%                 R is reserved while rebox is on. Default: false
+%
+%                   Example: fix boxes that miss their call
+%                       c = judgeDetections(c, 500, 64, 58, 3, 6, 'rebox', true)
+%
+% -------------------------------------------------------------------------
 %   OPTIONAL NAME-VALUE INPUTS — Visualisation
 % -------------------------------------------------------------------------
 %   windowType  - How to determine the audio window around each detection:
@@ -206,6 +221,9 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %
 %     Reason keys         Keys given in the reasons option record their
 %                         verdict and label, and advance.
+%
+%     R                   With the rebox option: click two corners to draw
+%                         a new box (verdict 1), and advance. Esc cancels.
 %
 %   AUDIO
 %     P                   Play the audio clip for the current detection window.
@@ -322,6 +340,8 @@ arguments
     options.overwriteJudged (1,1) logical = false
     % Reasons
     options.reasons cell = {}
+    % Rebox
+    options.rebox (1,1) logical = false
     % Visualisation
     options.windowType  (1,1) string ...
         {mustBeMember(options.windowType,{'prePost','fixed','tight'})} = 'prePost'
@@ -364,7 +384,9 @@ if ~isempty(reasons)
             'reasons must be an N-by-3 cell array {key, verdict, label} with single-character keys.');
     end
     reasonCodes = cellfun(@double, reasons(:, 1));
-    clash = intersect(reasonCodes, double('ips-'));
+    reserved = 'ips-';
+    if options.rebox, reserved = [reserved 'r']; end
+    clash = intersect(reasonCodes, double(reserved));
     if ~isempty(clash)
         error('judgeDetections:reasonKeyInUse', ...
             'Reason key ''%s'' is already used by judgeDetections.', char(clash(1)));
@@ -377,10 +399,23 @@ else
 end
 hasReasonCol = any(strcmp('verdictReason', c.Properties.VariableNames));
 
+rebox = options.rebox;
+reboxCols = {'t0Rebox', 'tEndRebox', 'fLowRebox', 'fHighRebox'};
+if rebox
+    for v = reboxCols
+        if ~any(strcmp(v{1}, c.Properties.VariableNames))
+            c.(v{1}) = nan(height(c), 1);
+        end
+    end
+end
+
 % Key guide, shown under the title on every detection
 keyGuide = 'Left click: yes   Right click: no   Middle or -: other';
 for r = 1:size(reasons, 1)
     keyGuide = sprintf('%s   %s: %s', keyGuide, reasons{r, 1}, reasons{r, 3});
+end
+if rebox
+    keyGuide = sprintf('%s   R: redraw box (2 corners)', keyGuide);
 end
 keyGuide = {keyGuide, ['Backspace: back   Arrows: contrast   ' ...
     'P: play   I: print row   S: screenshot   Close window: stop']};
@@ -573,6 +608,16 @@ while (i <= nDet)
             if ho==0; hold off; end
         end
 
+        if rebox && ~isnan(c.t0Rebox(i))
+            ho = ishold;
+            hold on;
+            l = (c.t0Rebox(i) - startTime)*86400;
+            r = (c.tEndRebox(i) - startTime)*86400;
+            plotBox([l,r],[c.fLowRebox(i),c.fHighRebox(i)],'g','linewidth',1.5);
+            text(l,c.fHighRebox(i),'reboxed','color','g','FontSize',8);
+            if ho==0; hold off; end
+        end
+
         ti = {sprintf('#% 4g/%g floor/ceil percentile=[%g %g]',...
             1+(i-1)/increment,floor(nDet/increment), cAdjust), ...
             sprintf('(Row % 4g: %s)',i, datestr(c.t0(i)))};
@@ -607,6 +652,7 @@ while (i <= nDet)
                     c.verdict(i) = 1;
                     c.judged(i)=true;
                     if hasReasonCol, c.verdictReason{i} = ''; end
+                    if rebox, c(i, reboxCols) = {NaN, NaN, NaN, NaN}; end
                 end
                 revisit = 0;
                 i = i + increment;
@@ -616,6 +662,7 @@ while (i <= nDet)
                     c.verdict(i) = 0;
                     c.judged(i)=true;
                     if hasReasonCol, c.verdictReason{i} = ''; end
+                    if rebox, c(i, reboxCols) = {NaN, NaN, NaN, NaN}; end
                 end
                 revisit = 0;
                 i = i + increment;
@@ -625,6 +672,7 @@ while (i <= nDet)
                     c.verdict(i) = -1;
                     c.judged(i)=true;
                     if hasReasonCol, c.verdictReason{i} = ''; end
+                    if rebox, c(i, reboxCols) = {NaN, NaN, NaN, NaN}; end
                 end
                 revisit = 0;
                 i = i + increment;
@@ -634,9 +682,26 @@ while (i <= nDet)
                     c.verdict(i) = reasons{r, 2};
                     c.judged(i) = true;
                     c.verdictReason{i} = reasons{r, 3};
+                    if rebox, c(i, reboxCols) = {NaN, NaN, NaN, NaN}; end
                 end
                 revisit = 0;
                 i = i + increment;
+            case 114 % r key - redraw the box (rebox option only)
+                if rebox && (c.judged(i)~=true || overwriteJudged || i == revisit)
+                    [tSpan, fSpan] = drawBox(mainAx);
+                    if ~isempty(tSpan)
+                        c.t0Rebox(i)   = startTime + tSpan(1)/86400;
+                        c.tEndRebox(i) = startTime + tSpan(2)/86400;
+                        c.fLowRebox(i) = fSpan(1);
+                        c.fHighRebox(i) = fSpan(2);
+                        c.verdict(i) = 1;
+                        c.judged(i) = true;
+                        if hasReasonCol, c.verdictReason{i} = 'reboxed'; end
+                        pause(0.3);
+                        revisit = 0;
+                        i = i + increment;
+                    end
+                end
             case 8 % Backspace - go back one detection to correct it
                 i = max(i - increment, 1);
                 revisit = i;
