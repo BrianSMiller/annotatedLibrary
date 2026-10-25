@@ -210,10 +210,21 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %   showChannels - Channels to show stacked, one panel each: [] (default)
 %                  shows only the detection's own channel; a vector (e.g.
 %                  [1 2 3]) or 'all' stacks those channels. The detection's
-%                  boxes are drawn on its own channel; other detections of c
-%                  in the window are drawn dashed on their channels (e.g.
-%                  the same call on other sonobuoys).
+%                  boxes are drawn on its own channel.
 %                  Default: []
+%
+%   Other boxes  - Other detections of c within the window are always drawn
+%                  white dashed, on their own channel (all channels if c has
+%                  no channel column), e.g. the same call on another
+%                  sonobuoy, or a second box on the same call.
+%
+%   contextBoxes - A table of further boxes to draw white dashed for context,
+%                  e.g. every other annotation in the recording, so a
+%                  duplicate or a neighbouring call can be seen. Needs t0,
+%                  tEnd, fLow, fHigh (datenum, Hz); optional channel (drawn
+%                  on that channel only) and label (text drawn at the box's
+%                  top left). Only boxes within the window are drawn.
+%                  Default: table() (none)
 %
 %   cmPerPixel  - Width of each spectrogram time-bin in centimetres on
 %                 screen. Controls how wide the figure window is drawn.
@@ -381,6 +392,7 @@ arguments
     options.cmPerPixel  (1,1) {mustBeNumeric, mustBePositive} = 0.05
     options.figPos      (1,4) {mustBeNumeric}                 = [100 400 679 400]
     options.showChannels                                      = []
+    options.contextBoxes                                      = table()
 end
 
 % Unpack options into local variables for readability
@@ -579,10 +591,9 @@ while (i <= nDet)
             if stacked
                 colormap(ax, flipud(gray));
                 ylabel(ax, sprintf('Ch %d', chans(k)));
-                if chans(k) ~= thisChannel
-                    otherBoxes(ax, c, i, chans(k), startTime, endTime, hasChannelCol);
-                end
             end
+            otherBoxes(ax, c, i, chans(k), startTime, endTime);
+            otherBoxes(ax, options.contextBoxes, [], chans(k), startTime, endTime);
         end
         axes(mainAx);
 
@@ -792,12 +803,31 @@ if ismember('freq', vn) && size(c.freq, 2) == 2, c.freq(i, :) = [c.fLow(i) c.fHi
 if ismember('duration', vn), c.duration(i) = (c.tEnd(i) - c.t0(i))*86400; end
 end
 
-function otherBoxes(ax, c, i, channel, startTime, endTime, hasChannelCol)
-% Dashed boxes for the other detections of c on this channel within the
-% window (e.g. the same call on another sonobuoy), so stacked channels can
-% be compared.
-if ~hasChannelCol || ~all(ismember({'t0','tEnd','fLow','fHigh'}, c.Properties.VariableNames))
+function otherBoxes(ax, b, exclude, channel, startTime, endTime)
+% White dashed boxes for the rows of table b within the window, except row
+% exclude: on this channel only if b has a channel column, otherwise on
+% every channel. A label column, if present, is written at each box's top
+% left. Used for the other detections of c and for contextBoxes.
+if isempty(b) || height(b) == 0 || ~all(ismember({'t0','tEnd','fLow','fHigh'}, b.Properties.VariableNames))
     return
+end
+inWin = b.t0 < endTime & b.tEnd > startTime;
+if ismember('channel', b.Properties.VariableNames)
+    inWin = inWin & (b.channel == channel | isnan(b.channel));
+end
+inWin(exclude) = false;
+hasLabel = ismember('label', b.Properties.VariableNames);
+ho = ishold(ax);
+hold(ax, 'on');
+for r = find(inWin)'
+    x = ([b.t0(r) b.tEnd(r)] - startTime)*86400;
+    plot(ax, x([1 1 2 2 1]), [b.fLow(r) b.fHigh(r) b.fHigh(r) b.fLow(r) b.fLow(r)], 'w--', 'LineWidth', 1);
+    if hasLabel
+        text(ax, x(1), b.fHigh(r), char(string(b.label(r))), 'Color', 'w', 'FontSize', 8, ...
+            'VerticalAlignment', 'bottom', 'Interpreter', 'none');
+    end
+end
+if ~ho, hold(ax, 'off'); end
 end
 rows = find(c.channel == channel & c.t0 < endTime & c.tEnd > startTime);
 rows(rows == i) = [];
