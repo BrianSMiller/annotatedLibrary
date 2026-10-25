@@ -697,6 +697,14 @@ while (i <= nDet)
                 i = i + increment;
             case 114 % r key - redraw the box (rebox option only)
                 if rebox && (c.judged(i)~=true || overwriteJudged || i == revisit)
+                    % Show that clicks now draw a box, not a verdict
+                    redrawMsg = 'REDRAW BOX: click two opposite corners.   Esc: cancel';
+                    if stacked
+                        subtitle(tl, redrawMsg, 'FontSize', 11, 'FontWeight', 'bold', 'Color', [0 0.6 0]);
+                    else
+                        subtitle(mainAx, redrawMsg, 'FontSize', 11, 'FontWeight', 'bold', 'Color', [0 0.6 0]);
+                    end
+                    drawnow;
                     [tSpan, fSpan] = drawBox(mainAx);
                     if ~isempty(tSpan)
                         c = setBounds(c, i, true, startTime + tSpan/86400, fSpan);
