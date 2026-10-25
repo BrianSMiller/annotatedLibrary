@@ -139,9 +139,10 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %                 (copied once, only if absent, so a real original is
 %                 never overwritten), and a logical column reboxed flags
 %                 the row. The verdict is set to 1, and verdictReason (if
-%                 present) to 'reboxed'. Any other verdict on a reboxed
-%                 row restores the original bounds. A redrawn box is shown
-%                 in green when the detection is shown again.
+%                 present) to 'reboxed'. A left click keeps the box as
+%                 shown (a redrawn box stays redrawn); any other verdict on
+%                 a reboxed row restores the original bounds. A redrawn
+%                 box is shown in green when the detection is shown again.
 %                 R is reserved while rebox is on. Default: false
 %
 %                   Example: fix boxes that miss their call
@@ -696,7 +697,9 @@ while (i <= nDet)
                     c.verdict(i) = 1;
                     c.judged(i)=true;
                     if hasReasonCol, c.verdictReason{i} = ''; end
-                    if rebox, c = setBounds(c, i, false); end
+                    % Rebox mode: a left click keeps the box as shown,
+                    % including a box redrawn earlier
+                    if rebox && c.reboxed(i) && hasReasonCol, c.verdictReason{i} = 'reboxed'; end
                 end
                 revisit = 0;  decided = true;
                 i = i + increment;
