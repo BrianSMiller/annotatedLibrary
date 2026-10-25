@@ -32,7 +32,9 @@ if isempty(firstPoint)
 else
     x1 = firstPoint(1);  y1 = firstPoint(2);
 end
+wasHeld = ishold(ax);
 hold(ax, 'on');
+restoreHold = onCleanup(@() restore(ax, wasHeld));   % leave hold as it was
 hMark = plot(ax, x1, y1, '+', 'Color', color, 'MarkerSize', 12, 'LineWidth', 1.5);
 drawnow;
 [x2, y2, b2] = ginput(1);
@@ -43,4 +45,8 @@ tSpan = sort([x1 x2]);
 fSpan = sort([y1 y2]);
 plot(ax, tSpan([1 1 2 2 1]), fSpan([1 2 2 1 1]), 'Color', color, 'LineWidth', 1.5);
 drawnow;
+end
+
+function restore(ax, wasHeld)
+if ~wasHeld && isvalid(ax), hold(ax, 'off'); end
 end

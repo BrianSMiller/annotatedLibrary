@@ -536,7 +536,7 @@ while (i <= nDet)
                 wavK = removeClicks(wavK,threshold,power);
             end
 
-            if stacked, ax = nexttile(tl); else, ax = gca; end
+            if stacked, ax = nexttile(tl); else, ax = gca; cla(ax); hold(ax, 'off'); end
             [s,f,t,p] = spectrogram(wavK,nfft,noverlap,[],sampleRate,'yAxis');
 
             pdB = 20*log10(p);
