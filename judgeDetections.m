@@ -109,6 +109,25 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %                           {'h', 0, 'too high'; 'n', 0, 'noise'})
 %
 % -------------------------------------------------------------------------
+%   OPTIONAL NAME-VALUE INPUTS — Saving progress
+% -------------------------------------------------------------------------
+%   saveFile    - .mat file. After every verdict, c is saved there as
+%                 variable c, so nothing is lost if MATLAB stops. To resume,
+%                 load the file and pass c back in: judged rows are skipped.
+%                 Default: '' (no saving; save the returned c yourself)
+%
+%                   Example: save as you go, and resume
+%                       if isfile(f), load(f, 'c'); end
+%                       c = judgeDetections(c, 500, 64, 58, 'saveFile', f);
+%
+%   onVerdict   - Function called after every verdict as onVerdict(c, i),
+%                 with the updated table and the row just judged (after
+%                 saveFile, if both are given). Use it for anything else
+%                 that should happen at once: copying verdicts into a
+%                 larger table, saving elsewhere, a running count.
+%                 Default: [] (none)
+%
+% -------------------------------------------------------------------------
 %   OPTIONAL NAME-VALUE INPUTS — Rebox
 % -------------------------------------------------------------------------
 %   rebox       - If true, the R key redraws the box: click two opposite
@@ -347,6 +366,9 @@ arguments
     options.reasons cell = {}
     % Rebox
     options.rebox (1,1) logical = false
+    % Saving progress
+    options.saveFile  {mustBeText} = ''
+    options.onVerdict = []
     % Visualisation
     options.windowType  (1,1) string ...
         {mustBeMember(options.windowType,{'prePost','fixed','tight'})} = 'prePost'
@@ -646,6 +668,8 @@ while (i <= nDet)
         drawnow;
 
         [~,~,button] = ginput(1);
+        iNow = i;          % row this key applies to
+        decided = false;   % set by every verdict key
         switch button
             case 28 % Left arrow shift color floor down (darker)
                 cAdjust = cAdjust+[-1 0];
@@ -663,7 +687,7 @@ while (i <= nDet)
                     if hasReasonCol, c.verdictReason{i} = ''; end
                     if rebox, c = setBounds(c, i, false); end
                 end
-                revisit = 0;
+                revisit = 0;  decided = true;
                 i = i + increment;
             case 3 % Right click for false positive
                 % Only write new verdicts or if overwriteJudged==true)
@@ -673,7 +697,7 @@ while (i <= nDet)
                     if hasReasonCol, c.verdictReason{i} = ''; end
                     if rebox, c = setBounds(c, i, false); end
                 end
-                revisit = 0;
+                revisit = 0;  decided = true;
                 i = i + increment;
             case {2,45} % -/Minus-key/Middle click for 'other'
                 % Only write if new verdicts (unless overwrite is true)
@@ -683,7 +707,7 @@ while (i <= nDet)
                     if hasReasonCol, c.verdictReason{i} = ''; end
                     if rebox, c = setBounds(c, i, false); end
                 end
-                revisit = 0;
+                revisit = 0;  decided = true;
                 i = i + increment;
             case num2cell(reasonCodes) % reason keys: verdict plus label
                 if c.judged(i)~=true || overwriteJudged || i == revisit
@@ -693,7 +717,7 @@ while (i <= nDet)
                     c.verdictReason{i} = reasons{r, 3};
                     if rebox, c = setBounds(c, i, false); end
                 end
-                revisit = 0;
+                revisit = 0;  decided = true;
                 i = i + increment;
             case 114 % r key - redraw the box (rebox option only)
                 if rebox && (c.judged(i)~=true || overwriteJudged || i == revisit)
@@ -712,7 +736,7 @@ while (i <= nDet)
                         c.judged(i) = true;
                         if hasReasonCol, c.verdictReason{i} = 'reboxed'; end
                         pause(0.3);
-                        revisit = 0;
+                        revisit = 0;  decided = true;
                         i = i + increment;
                     end
                 end
@@ -727,6 +751,11 @@ while (i <= nDet)
             case 115 % s key - save screenshot
                 saveAsPng(sprintf('adjudication_%03g',i))
                 
+        end
+
+        if decided
+            if ~isempty(options.saveFile), save(options.saveFile, 'c'); end
+            if ~isempty(options.onVerdict), options.onVerdict(c, iNow); end
         end
 
         % Ensure percentile stay within 0 and 100;
