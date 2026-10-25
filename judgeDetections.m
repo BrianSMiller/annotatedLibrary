@@ -829,16 +829,6 @@ for r = find(inWin)'
 end
 if ~ho, hold(ax, 'off'); end
 end
-rows = find(c.channel == channel & c.t0 < endTime & c.tEnd > startTime);
-rows(rows == i) = [];
-ho = ishold(ax);
-hold(ax, 'on');
-for r = rows'
-    plot(ax, ([c.t0(r) c.t0(r) c.tEnd(r) c.tEnd(r) c.t0(r)] - startTime)*86400, ...
-        [c.fLow(r) c.fHigh(r) c.fHigh(r) c.fLow(r) c.fLow(r)], 'w--', 'LineWidth', 1);
-end
-if ~ho, hold(ax, 'off'); end
-end
 
 function ch = channelFor(c, i, hasChannelCol)
 % Channel to show (1-based, as in the detection contract); 1 if c has no
