@@ -94,6 +94,60 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %                     Default: false
 %
 % -------------------------------------------------------------------------
+%   OPTIONAL NAME-VALUE INPUTS — Reasons
+% -------------------------------------------------------------------------
+%   reasons     - Extra keys that record a verdict together with a reason,
+%                 as an N-by-3 cell array {key, verdict, label}. key is a
+%                 single character not already used (i, p, s, -), verdict
+%                 is the value written to c.verdict, and label is written
+%                 to c.verdictReason. Clicks leave verdictReason empty.
+%                 c.verdictReason is created when reasons are given.
+%                 Default: {} (no reason keys)
+%
+%                   Example: reject with a reason
+%                       judgeDetections(c, 500, 64, 58, 'reasons', ...
+%                           {'h', 0, 'too high'; 'n', 0, 'noise'})
+%
+% -------------------------------------------------------------------------
+%   OPTIONAL NAME-VALUE INPUTS — Saving progress
+% -------------------------------------------------------------------------
+%   saveFile    - .mat file. After every verdict, c is saved there as
+%                 variable c, so nothing is lost if MATLAB stops. To resume,
+%                 load the file and pass c back in: judged rows are skipped.
+%                 Default: '' (no saving; save the returned c yourself)
+%
+%                   Example: save as you go, and resume
+%                       if isfile(f), load(f, 'c'); end
+%                       c = judgeDetections(c, 500, 64, 58, 'saveFile', f);
+%
+%   onVerdict   - Function called after every verdict as onVerdict(c, i),
+%                 with the updated table and the row just judged (after
+%                 saveFile, if both are given). Use it for anything else
+%                 that should happen at once: copying verdicts into a
+%                 larger table, saving elsewhere, a running count.
+%                 Default: [] (none)
+%
+% -------------------------------------------------------------------------
+%   OPTIONAL NAME-VALUE INPUTS — Rebox
+% -------------------------------------------------------------------------
+%   rebox       - If true, the R key redraws the box: click two opposite
+%                 corners (drawBox). Same convention as bsnr's bounds
+%                 refinement (qcAttachSnr, trimAnnotation): the new bounds
+%                 go in place, in t0, tEnd, fLow, fHigh (and freq and
+%                 duration if present), the bounds before are kept in
+%                 originalT0, originalTEnd, originalFLow, originalFHigh
+%                 (copied once, only if absent, so a real original is
+%                 never overwritten), and a logical column reboxed flags
+%                 the row. The verdict is set to 1, and verdictReason (if
+%                 present) to 'reboxed'. Any other verdict on a reboxed
+%                 row restores the original bounds. A redrawn box is shown
+%                 in green when the detection is shown again.
+%                 R is reserved while rebox is on. Default: false
+%
+%                   Example: fix boxes that miss their call
+%                       c = judgeDetections(c, 500, 64, 58, 3, 6, 'rebox', true)
+%
+% -------------------------------------------------------------------------
 %   OPTIONAL NAME-VALUE INPUTS — Visualisation
 % -------------------------------------------------------------------------
 %   windowType  - How to determine the audio window around each detection:
@@ -153,6 +207,14 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %                  with a one-time console note.
 %                  Default: true
 %
+%   showChannels - Channels to show stacked, one panel each: [] (default)
+%                  shows only the detection's own channel; a vector (e.g.
+%                  [1 2 3]) or 'all' stacks those channels. The detection's
+%                  boxes are drawn on its own channel; other detections of c
+%                  in the window are drawn dashed on their channels (e.g.
+%                  the same call on other sonobuoys).
+%                  Default: []
+%
 %   cmPerPixel  - Width of each spectrogram time-bin in centimetres on
 %                 screen. Controls how wide the figure window is drawn.
 %                 Increase for more detail; decrease to fit more time on
@@ -173,6 +235,19 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %                         and advance to the next detection.
 %     Middle click or -   Mark current detection as OTHER (verdict = -1)
 %                         and advance to the next detection.
+%     Backspace           Go back one detection (by increment) to correct
+%                         it. It is shown even if already judged, with its
+%                         verdict in a banner, and the next click replaces
+%                         that verdict (whatever overwriteJudged says).
+%                         Press repeatedly to go further back. After the
+%                         correction, review resumes at the first unjudged
+%                         detection.
+%
+%     Reason keys         Keys given in the reasons option record their
+%                         verdict and label, and advance.
+%
+%     R                   With the rebox option: click two corners to draw
+%                         a new box (verdict 1), and advance. Esc cancels.
 %
 %   AUDIO
 %     P                   Play the audio clip for the current detection window.
@@ -205,7 +280,9 @@ function c = judgeDetections(c,sampleRate,nfft,noverlap,pre,post, ...
 %     trace and exits, returning c as modified up to that point. Save c
 %     immediately after a session ends.
 %   - Audio is loaded using getAudioFromFiles, which must be
-%     on the MATLAB path.
+%     on the MATLAB path. If c has a channel column (1-based, as written by
+%     ravenTableToDetection), each detection is shown on its own channel;
+%     otherwise channel 1.
 %   - soundFolder is resolved ONCE per session, before the review loop,
 %     and reused for every row. c is assumed to be a single-deployment
 %     table. Resolution order:
@@ -285,6 +362,13 @@ arguments
     % Program flow
     options.showJudged      (1,1) logical = false
     options.overwriteJudged (1,1) logical = false
+    % Reasons
+    options.reasons cell = {}
+    % Rebox
+    options.rebox (1,1) logical = false
+    % Saving progress
+    options.saveFile  {mustBeText} = ''
+    options.onVerdict = []
     % Visualisation
     options.windowType  (1,1) string ...
         {mustBeMember(options.windowType,{'prePost','fixed','tight'})} = 'prePost'
@@ -296,6 +380,7 @@ arguments
     options.showOriginalBounds (1,1) logical                  = true
     options.cmPerPixel  (1,1) {mustBeNumeric, mustBePositive} = 0.05
     options.figPos      (1,4) {mustBeNumeric}                 = [100 400 679 400]
+    options.showChannels                                      = []
 end
 
 % Unpack options into local variables for readability
@@ -309,6 +394,7 @@ showRefinedBounds  = options.showRefinedBounds;
 showOriginalBounds = options.showOriginalBounds;
 cmPerPixel      = options.cmPerPixel;
 pos             = options.figPos;
+showChannels    = options.showChannels;
 
 %% Create verdict and judged columns unless they already exist
 if ~any(strcmp('verdict',fieldnames(c)))
@@ -317,6 +403,53 @@ end
 if ~any(strcmp('judged',fieldnames(c)))
     c.judged = false(size(c.verdict));
 end
+
+reasons = options.reasons;
+if ~isempty(reasons)
+    if size(reasons, 2) ~= 3 || ~all(cellfun(@(k) ischar(k) && isscalar(k), reasons(:, 1)))
+        error('judgeDetections:badReasons', ...
+            'reasons must be an N-by-3 cell array {key, verdict, label} with single-character keys.');
+    end
+    reasonCodes = cellfun(@double, reasons(:, 1));
+    reserved = 'ips-';
+    if options.rebox, reserved = [reserved 'r']; end
+    clash = intersect(reasonCodes, double(reserved));
+    if ~isempty(clash)
+        error('judgeDetections:reasonKeyInUse', ...
+            'Reason key ''%s'' is already used by judgeDetections.', char(clash(1)));
+    end
+    if ~any(strcmp('verdictReason', c.Properties.VariableNames))
+        c.verdictReason = repmat({''}, height(c), 1);
+    end
+else
+    reasonCodes = NaN;   % matches no key
+end
+hasReasonCol = any(strcmp('verdictReason', c.Properties.VariableNames));
+
+rebox = options.rebox;
+if rebox
+    vn = c.Properties.VariableNames;
+    if ~all(ismember({'t0','tEnd','fLow','fHigh'}, vn))
+        error('judgeDetections:reboxColumns', 'rebox needs t0, tEnd, fLow and fHigh columns in c.');
+    end
+    % Keep the bounds before reboxing, once (as qcAttachSnr does)
+    if ~ismember('originalT0', vn),   c.originalT0   = c.t0;   end
+    if ~ismember('originalTEnd', vn), c.originalTEnd = c.tEnd; end
+    if ~ismember('originalFLow', vn), c.originalFLow = c.fLow; end
+    if ~ismember('originalFHigh', vn), c.originalFHigh = c.fHigh; end
+    if ~ismember('reboxed', vn), c.reboxed = false(height(c), 1); end
+end
+
+% Key guide, shown under the title on every detection
+keyGuide = 'Left click: yes   Right click: no   Middle or -: other';
+for r = 1:size(reasons, 1)
+    keyGuide = sprintf('%s   %s: %s', keyGuide, reasons{r, 1}, reasons{r, 3});
+end
+if rebox
+    keyGuide = sprintf('%s   R: redraw box (2 corners)', keyGuide);
+end
+keyGuide = {keyGuide, ['Backspace: back   Arrows: contrast   ' ...
+    'P: play   I: print row   S: screenshot   Close window: stop']};
 
 nDet = height(c);
 soundFolder = resolveSoundFolder(c, options.soundFolder);
@@ -354,19 +487,23 @@ if showOriginalBounds && ~all(ismember( ...
 end
 
 hasBoundsRefinedCol = any(strcmp('boundsRefined', c.Properties.VariableNames));
+hasChannelCol = any(strcmp('channel', c.Properties.VariableNames));
 
 figure('position',pos);
 colormap(flipud(gray));
 set(gcf,'units','centimeters');
 
 i = startIndex;
+revisit = 0;   % index reached with Backspace: shown and overwritable
 while (i <= nDet)
     pos = get(gcf,'pos');
     msg = '';
     try
-        if c.judged(i)==true && ~isnan(c.verdict(i))
+        if i == revisit
+            msg = sprintf('Correcting: judged as %s. Click to replace.', verdictText(c, i, hasReasonCol));
+        elseif c.judged(i)==true && ~isnan(c.verdict(i))
             if showJudged
-                msg = sprintf('Already judged as %g', c.verdict(i));
+                msg = sprintf('Already judged as %s', verdictText(c, i, hasReasonCol));
             else
                 i = i+increment; % Uncomment to skip already judged
                 continue
@@ -392,38 +529,62 @@ while (i <= nDet)
                 startTime = callStart;
                 endTime = callEnd;
         end
-        wav =  getAudioFromFiles(wavInfo,startTime,endTime,newRate=sampleRate);
-
-        % Remove clicks
-        if ~isempty(options.suppressClickThreshold)
-            threshold = options.suppressClickThreshold;
-            power = 1000;
-            if ~isempty(options.suppressClickPower)
-                power = options.suppressClickPower;
-            end
-            wav = removeClicks(wav,threshold,power);
+        % Channels to show: this detection's own, or several stacked
+        thisChannel = channelFor(c, i, hasChannelCol);
+        if isempty(showChannels)
+            chans = thisChannel;
+        elseif ischar(showChannels) || isstring(showChannels)   % 'all'
+            chans = 1:wavInfo(1).numberOfChannels;
+        else
+            chans = showChannels(:)';
         end
+        stacked = numel(chans) > 1;
+        if stacked
+            clf;
+            tl = tiledlayout(numel(chans), 1, 'TileSpacing', 'compact', 'Padding', 'compact');
+        end
+        mainAx = [];
+        for k = 1:numel(chans)
+            wavK = getAudioFromFiles(wavInfo,startTime,endTime,newRate=sampleRate, ...
+                channel=chans(k));
 
+            % Remove clicks
+            if ~isempty(options.suppressClickThreshold)
+                threshold = options.suppressClickThreshold;
+                power = 1000;
+                if ~isempty(options.suppressClickPower)
+                    power = options.suppressClickPower;
+                end
+                wavK = removeClicks(wavK,threshold,power);
+            end
 
+            if stacked, ax = nexttile(tl); else, ax = gca; cla(ax); hold(ax, 'off'); end
+            [s,f,t,p] = spectrogram(wavK,nfft,noverlap,[],sampleRate,'yAxis');
 
-        [s,f,t,p] = spectrogram(wav,nfft,noverlap,[],sampleRate,'yAxis');
+            pdB = 20*log10(p);
+            fIx = double(f > freqBand(1) & f < freqBand(2));
+            nanIx = find(fIx==0);
+            fIx(nanIx)=nan(size(nanIx));
+            pIx = repmat(fIx,1,length(t));
+            h = pcolor(ax,t,f,pdB);
+            set(h,'lineStyle','none');
+            clim(1) = prctile(pdB(:).*pIx(:),cAdjust(1));
+            clim(2) = prctile(pdB(:).*pIx(:),cAdjust(2));
+            set(ax,'clim',clim);
 
-        pdB = 20*log10(p);
-        fIx = double(f > freqBand(1) & f < freqBand(2));
-        nanIx = find(fIx==0);
-        fIx(nanIx)=nan(size(nanIx));
-        pIx = repmat(fIx,1,length(t));
-        %         h = pcolor(t,f,pdB.*pIx);
-        h = pcolor(t,f,pdB);
-
-        set(h,'lineStyle','none');
-        %         view([0,90]);
-        %         clim(1) = min(pdB(:).*pIx(:));
-        clim(1) = prctile(pdB(:).*pIx(:),cAdjust(1));
-        %         clim(2) = max(pdB(:).*pIx(:));
-        clim(2) = prctile(pdB(:).*pIx(:),cAdjust(2));
-
-        set(gca,'clim',clim);
+            if chans(k) == thisChannel || (k == numel(chans) && isempty(mainAx))
+                mainAx = ax;
+                wav = wavK;   % played by P
+            end
+            if stacked
+                colormap(ax, flipud(gray));
+                ylabel(ax, sprintf('Ch %d', chans(k)));
+                if chans(k) ~= thisChannel
+                    otherBoxes(ax, c, i, chans(k), startTime, endTime, hasChannelCol);
+                end
+            end
+        end
+        axes(mainAx);
 
         %         caxis([100,200]-200);
         %         ylim([0,0.5]);
@@ -478,11 +639,27 @@ while (i <= nDet)
             if ho==0; hold off; end
         end
 
+        if rebox && c.reboxed(i)
+            ho = ishold;
+            hold on;
+            l = (c.t0(i) - startTime)*86400;
+            r = (c.tEnd(i) - startTime)*86400;
+            plotBox([l,r],[c.fLow(i),c.fHigh(i)],'g','linewidth',1.5);
+            text(l,c.fHigh(i),'reboxed','color','g','FontSize',8);
+            if ho==0; hold off; end
+        end
+
         ti = {sprintf('#% 4g/%g floor/ceil percentile=[%g %g]',...
             1+(i-1)/increment,floor(nDet/increment), cAdjust), ...
             sprintf('(Row % 4g: %s)',i, datestr(c.t0(i)))};
 
-        title(ti);
+        if stacked
+            title(tl, ti);
+            subtitle(tl, keyGuide, 'FontSize', 9, 'Color', [0.3 0.3 0.3]);
+        else
+            title(ti);
+            subtitle(keyGuide, 'FontSize', 9, 'Color', [0.3 0.3 0.3]);
+        end
         text(mean(xlim),max(ylim),msg,'VerticalAlignment','top',...
             'FontSize',14,'FontWeight','bold','HorizontalAlignment','center','BackgroundColor','w');
 
@@ -491,6 +668,8 @@ while (i <= nDet)
         drawnow;
 
         [~,~,button] = ginput(1);
+        iNow = i;          % row this key applies to
+        decided = false;   % set by every verdict key
         switch button
             case 28 % Left arrow shift color floor down (darker)
                 cAdjust = cAdjust+[-1 0];
@@ -502,25 +681,68 @@ while (i <= nDet)
                 cAdjust = cAdjust+[0 -1]; % Down arrow to shift cieling down (darker)
             case 1 % Left click for true positive;
                 % Only write if new verdicts (unless overwrite is true)
-                if c.judged(i)~=true || overwriteJudged
+                if c.judged(i)~=true || overwriteJudged || i == revisit
                     c.verdict(i) = 1;
                     c.judged(i)=true;
+                    if hasReasonCol, c.verdictReason{i} = ''; end
+                    if rebox, c = setBounds(c, i, false); end
                 end
+                revisit = 0;  decided = true;
                 i = i + increment;
             case 3 % Right click for false positive
                 % Only write new verdicts or if overwriteJudged==true)
-                if c.judged(i)~=true || overwriteJudged
+                if c.judged(i)~=true || overwriteJudged || i == revisit
                     c.verdict(i) = 0;
                     c.judged(i)=true;
+                    if hasReasonCol, c.verdictReason{i} = ''; end
+                    if rebox, c = setBounds(c, i, false); end
                 end
+                revisit = 0;  decided = true;
                 i = i + increment;
             case {2,45} % -/Minus-key/Middle click for 'other'
                 % Only write if new verdicts (unless overwrite is true)
-                if c.judged(i)~=true || overwriteJudged
+                if c.judged(i)~=true || overwriteJudged || i == revisit
                     c.verdict(i) = -1;
                     c.judged(i)=true;
+                    if hasReasonCol, c.verdictReason{i} = ''; end
+                    if rebox, c = setBounds(c, i, false); end
                 end
+                revisit = 0;  decided = true;
                 i = i + increment;
+            case num2cell(reasonCodes) % reason keys: verdict plus label
+                if c.judged(i)~=true || overwriteJudged || i == revisit
+                    r = find(reasonCodes == button, 1);
+                    c.verdict(i) = reasons{r, 2};
+                    c.judged(i) = true;
+                    c.verdictReason{i} = reasons{r, 3};
+                    if rebox, c = setBounds(c, i, false); end
+                end
+                revisit = 0;  decided = true;
+                i = i + increment;
+            case 114 % r key - redraw the box (rebox option only)
+                if rebox && (c.judged(i)~=true || overwriteJudged || i == revisit)
+                    % Show that clicks now draw a box, not a verdict
+                    redrawMsg = 'REDRAW BOX: click two opposite corners.   Esc: cancel';
+                    if stacked
+                        subtitle(tl, redrawMsg, 'FontSize', 11, 'FontWeight', 'bold', 'Color', [0 0.6 0]);
+                    else
+                        subtitle(mainAx, redrawMsg, 'FontSize', 11, 'FontWeight', 'bold', 'Color', [0 0.6 0]);
+                    end
+                    drawnow;
+                    [tSpan, fSpan] = drawBox(mainAx);
+                    if ~isempty(tSpan)
+                        c = setBounds(c, i, true, startTime + tSpan/86400, fSpan);
+                        c.verdict(i) = 1;
+                        c.judged(i) = true;
+                        if hasReasonCol, c.verdictReason{i} = 'reboxed'; end
+                        pause(0.3);
+                        revisit = 0;  decided = true;
+                        i = i + increment;
+                    end
+                end
+            case 8 % Backspace - go back one detection to correct it
+                i = max(i - increment, 1);
+                revisit = i;
             case 105 % i key - print capture history row in console
                 disp(table2struct(c(i,:)))
             case 112 % p key - Play visible audio
@@ -529,6 +751,11 @@ while (i <= nDet)
             case 115 % s key - save screenshot
                 saveAsPng(sprintf('adjudication_%03g',i))
                 
+        end
+
+        if decided
+            if ~isempty(options.saveFile), save(options.saveFile, 'c'); end
+            if ~isempty(options.onVerdict), options.onVerdict(c, iNow); end
         end
 
         % Ensure percentile stay within 0 and 100;
@@ -543,6 +770,58 @@ while (i <= nDet)
         fprintf('Exiting on index %g\n',i);
         return
     end
+end
+end
+
+function c = setBounds(c, i, isReboxed, tSpan, fSpan)
+% Rebox row i in place (isReboxed true, new [t0 tEnd] and [fLow fHigh]),
+% or restore its original bounds (isReboxed false; only if it was reboxed).
+% freq and duration follow, where c has them.
+if isReboxed
+    c.t0(i) = tSpan(1);  c.tEnd(i) = tSpan(2);
+    c.fLow(i) = fSpan(1);  c.fHigh(i) = fSpan(2);
+elseif c.reboxed(i)
+    c.t0(i) = c.originalT0(i);  c.tEnd(i) = c.originalTEnd(i);
+    c.fLow(i) = c.originalFLow(i);  c.fHigh(i) = c.originalFHigh(i);
+else
+    return
+end
+c.reboxed(i) = isReboxed;
+vn = c.Properties.VariableNames;
+if ismember('freq', vn) && size(c.freq, 2) == 2, c.freq(i, :) = [c.fLow(i) c.fHigh(i)]; end
+if ismember('duration', vn), c.duration(i) = (c.tEnd(i) - c.t0(i))*86400; end
+end
+
+function otherBoxes(ax, c, i, channel, startTime, endTime, hasChannelCol)
+% Dashed boxes for the other detections of c on this channel within the
+% window (e.g. the same call on another sonobuoy), so stacked channels can
+% be compared.
+if ~hasChannelCol || ~all(ismember({'t0','tEnd','fLow','fHigh'}, c.Properties.VariableNames))
+    return
+end
+rows = find(c.channel == channel & c.t0 < endTime & c.tEnd > startTime);
+rows(rows == i) = [];
+ho = ishold(ax);
+hold(ax, 'on');
+for r = rows'
+    plot(ax, ([c.t0(r) c.t0(r) c.tEnd(r) c.tEnd(r) c.t0(r)] - startTime)*86400, ...
+        [c.fLow(r) c.fHigh(r) c.fHigh(r) c.fLow(r) c.fLow(r)], 'w--', 'LineWidth', 1);
+end
+if ~ho, hold(ax, 'off'); end
+end
+
+function ch = channelFor(c, i, hasChannelCol)
+% Channel to show (1-based, as in the detection contract); 1 if c has no
+% channel column.
+ch = 1;
+if hasChannelCol && ~isnan(c.channel(i)), ch = c.channel(i); end
+end
+
+function txt = verdictText(c, i, hasReasonCol)
+% Verdict for the banner, with its reason when there is one.
+txt = sprintf('%g', c.verdict(i));
+if hasReasonCol && ~isempty(c.verdictReason{i})
+    txt = sprintf('%s (%s)', txt, c.verdictReason{i});
 end
 end
 
