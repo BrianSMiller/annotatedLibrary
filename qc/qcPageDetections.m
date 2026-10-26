@@ -28,7 +28,8 @@ function qcPageDetections(c, wavFolder, sp, k)
 %   k         - starting row index (default 1)
 %
 % Navigation: Left/Right arrows = page back/forward, Up/Down = jump 5%,
-% Space = redraw current page, Esc = quit.
+% Space = redraw current page, Esc = quit. Closing the window also quits
+% (quietly, so a caller such as qcDetector carries on and saves).
 % Info: I = print every detection on the current page to console
 %       (reuses qcPrintDetections); doesn't advance the page.
 % S     = save the current page as a PNG via saveAsPng; doesn't advance
@@ -118,7 +119,13 @@ while button ~= 27
     end
     pageIx = k:(k+nShown-1);
 
-    [~,~,button] = ginput(1);
+    % Closing the window (X) ends paging like Esc, rather than an error that
+    % would stop the caller (e.g. qcDetector before it saves its cache).
+    try
+        [~,~,button] = ginput(1);
+    catch
+        return;
+    end
     set(hTile.Title,'String','Seeking');
     drawnow;
     switch button
