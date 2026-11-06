@@ -36,6 +36,14 @@ function d = qcDetector(cfg, useCalibration, createCache, overwrite)
 %                            clicks, [60 70] for ABW song. Skipped
 %                            (with a note) if not supplied -- see
 %                            qcInterDetectionIntervalPlot.
+%            removeClicks  - OPTIONAL struct with fields threshold and
+%                            power, passed to bsnr's snrEstimate (via
+%                            qcAttachSnr) to suppress clicks and pulses
+%                            in the signal and noise audio before SNR is
+%                            measured, e.g. struct('threshold', 3,
+%                            'power', 1000) for sites with an echosounder
+%                            beside the hydrophone. Omitted: no click
+%                            removal.
 %   useCalibration - if true, attach calibrated SNR using cfg.siteMeta;
 %                    if false, uncalibrated RMS
 %   createCache - if true (default), check data/qc/<cfg.name>.mat before
@@ -180,6 +188,11 @@ if ~isempty(validRows)
         % Passed through as-is to snrEstimate -- e.g. kalmanRidge's
         % globalReferencePercentile/meanAbsentDuration_frames/etc.
         snrArgs = [snrArgs, {'ridgeParams', cfg.ridgeParams}];
+    end
+    if isfield(cfg,'removeClicks') && ~isempty(cfg.removeClicks)
+        % Passed through as-is to snrEstimate: click/pulse suppression on
+        % the signal and noise audio before SNR (threshold, power).
+        snrArgs = [snrArgs, {'removeClicks', cfg.removeClicks}];
     end
     if ~isempty(calib)
         snrArgs = [snrArgs, {'calibration', calib}];
